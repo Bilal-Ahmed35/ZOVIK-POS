@@ -1,0 +1,326 @@
+const { prisma } = require('../config/db');
+const { emitToVendor, emitToUser, emitToKitchen, emitToAdmin } = require('../sockets/socket');
+const { sendPaymentConfirmedEmail, sendOrderCancellationEmail } = require('../services/emailService');
+const { logAudit } = require('../middleware/auditMiddleware');
+
+/**
+ * Get current Payment Availability Settings (COD & Online)
+ */
+const getPaymentSettings = async (req, res) => {
+  try {
+    let settings = await prisma.paymentSetting.findFirst();
+    if (!settings) {
+      settings = await prisma.paymentSetting.create({
+        data: { codEnabled: true, onlineEnabled: true },
+      });
+    }
+
+    return res.json({
+      codEnabled: settings.codEnabled,
+      onlineEnabled: settings.onlineEnabled,
+      updatedAt: settings.updatedAt,
+    });
+  } catch (error) {
+    console.error('Get payment settings error:', error);
+    return res.status(500).json({ error: 'Failed to fetch payment availability settings.' });
+  }
+};
+
+/**
+ * Update Payment Availability Settings (Admin & Vendor only)
+ */
+const updatePaymentSettings = async (req, res) => {
+  const { codEnabled, onlineEnabled } = req.body;
+  const staffUserId = req.user?.id;
+
+  try {
+    let settings = await prisma.paymentSetting.findFirst();
+    const updateData = {};
+    if (typeof codEnabled === 'boolean') updateData.codEnabled = codEnabled;
+    if (typeof onlineEnabled === 'boolean') updateData.onlineEnabled = onlineEnabled;
+
+    const oldVal = settings ? { codEnabled: settings.codEnabled, onlineEnabled: settings.onlineEnabled } : null;
+
+    if (!settings) {
+      settings = await prisma.paymentSetting.create({
+        data: {
+          codEnabled: typeof codEnabled === 'boolean' ? codEnabled : true,
+          onlineEnabled: typeof onlineEnabled === 'boolean' ? onlineEnabled : true,
+        },
+      });
+    } else {
+      settings = await prisma.paymentSetting.update({
+        where: { id: settings.id },
+        data: updateData,
+      });
+    }
+
+    const payload = {
+      codEnabled: settings.codEnabled,
+      onlineEnabled: settings.onlineEnabled,
+      updatedAt: settings.updatedAt,
+    };
+
+    // Realtime Socket broadcast to all connected clients (customers, vendors, admin)
+    const { io } = require('../sockets/socket');
+    if (io) {
+      io.emit('paymentSettings:update', payload);
+    }
+
+    await logAudit({
+      userId: staffUserId,
+      action: 'PAYMENT_SETTINGS_UPDATE',
+      entity: 'PaymentSetting',
+      entityId: String(settings.id),
+      oldValue: oldVal,
+      newValue: payload,
+      req,
+    });
+
+    return res.json({
+      message: 'Payment availability settings updated successfully.',
+      settings: payload,
+    });
+  } catch (error) {
+    console.error('Update payment settings error:', error);
+    return res.status(500).json({ error: 'Failed to update payment availability settings.' });
+  }
+};
+
+/**
+ * Submit online wallet transaction ID for verification
+ */
+const submitTransactionId = async (req, res) => {
+  const { orderId, paymentMethod, paymentTxId } = req.body;
+  const userId = req.user.id;
+
+  if (!orderId || !paymentMethod || !paymentTxId) {
+    return res.status(400).json({ error: 'Order ID, payment method, and transaction ID are required.' });
+  }
+
+  const cleanTxId = String(paymentTxId).trim();
+
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: parseInt(orderId, 10) },
+      include: {
+        orderItems: { include: { menuItem: true } },
+        user: { select: { id: true, name: true, email: true } },
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    if (order.userId !== userId && req.user.role === 'CUSTOMER') {
+      return res.status(403).json({ error: 'Access forbidden. This order belongs to another customer.' });
+    }
+
+    if (order.status === 'PAID') {
+      return res.status(400).json({ error: 'Order is already paid and verified.' });
+    }
+
+    if (['CANCELLED', 'REFUNDED'].includes(order.status)) {
+      return res.status(400).json({ error: `Cannot submit payment for a ${order.status.toLowerCase()} order.` });
+    }
+
+    // Check if txId is already used on another verified order
+    const existingTx = await prisma.order.findFirst({
+      where: {
+        paymentTxId: cleanTxId,
+        id: { not: order.id },
+        paymentStatus: 'VERIFIED',
+      },
+    });
+
+    if (existingTx) {
+      return res.status(400).json({ error: 'This transaction ID has already been verified for another order.' });
+    }
+
+    // Update order payment status
+    const updatedOrder = await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        paymentMethod,
+        paymentTxId: cleanTxId,
+        paymentStatus: 'PENDING_VERIFICATION',
+        status: 'PAYMENT_PENDING',
+      },
+      include: {
+        orderItems: { include: { menuItem: true } },
+        user: { select: { id: true, name: true, email: true } },
+        etaPrediction: true,
+      },
+    });
+
+    // Notify staff layers about transaction pending verification
+    emitToVendor('payment:verify', updatedOrder);
+    emitToAdmin('payment:verify', updatedOrder);
+    emitToVendor('order:update', updatedOrder);
+    emitToAdmin('order:update', updatedOrder);
+    emitToUser(userId, 'order:update', updatedOrder);
+
+    return res.json({
+      message: 'Transaction details submitted successfully. Awaiting staff verification.',
+      order: updatedOrder,
+    });
+  } catch (error) {
+    console.error('Submit payment transaction error:', error);
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'This transaction ID has already been submitted for another payment.' });
+    }
+    return res.status(500).json({ error: 'Failed to submit payment verification details.' });
+  }
+};
+
+/**
+ * Verify or Reject Online / Cash payment transaction (Admin & Vendor only)
+ */
+const verifyTransaction = async (req, res) => {
+  const { id } = req.params; // Order ID
+  const { approve, reason } = req.body; // approve: boolean
+  const staffUserId = req.user.id;
+
+  if (approve === undefined) {
+    return res.status(400).json({ error: 'Approval status (approve: true/false) is required.' });
+  }
+
+  try {
+    const order = await prisma.order.findUnique({
+      where: { id: parseInt(id, 10) },
+      include: {
+        orderItems: { include: { menuItem: true } },
+        user: { select: { id: true, name: true, email: true } },
+        etaPrediction: true,
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+
+    // Idempotency: if already verified and approve is requested, return order safely
+    if (approve && order.paymentStatus === 'VERIFIED' && order.status === 'PAID') {
+      return res.json({
+        message: 'Payment already verified.',
+        order,
+      });
+    }
+
+    if (['CANCELLED', 'REFUNDED'].includes(order.status)) {
+      return res.status(400).json({ error: `Cannot verify payment for a ${order.status.toLowerCase()} order.` });
+    }
+
+    const previousStatus = order.status;
+    const newStatus = approve ? 'PAID' : 'PAYMENT_FAILED';
+    const newPaymentStatus = approve ? 'VERIFIED' : 'FAILED';
+
+    const updatedOrder = await prisma.$transaction(async (tx) => {
+      // If rejecting payment, restore reserved inventory stock
+      if (!approve && previousStatus !== 'PAYMENT_FAILED') {
+        for (const item of order.orderItems) {
+          await tx.menuItem.update({
+            where: { id: item.menuItemId },
+            data: { stock: { increment: item.quantity } },
+          });
+
+          const inventoryItem = await tx.inventoryItem.findFirst({
+            where: { name: item.nameSnapshot },
+          });
+
+          if (inventoryItem) {
+            const qtyBefore = inventoryItem.stockLevel;
+            const qtyAfter = qtyBefore + item.quantity;
+
+            await tx.inventoryItem.update({
+              where: { id: inventoryItem.id },
+              data: { stockLevel: qtyAfter },
+            });
+
+            await tx.inventoryLog.create({
+              data: {
+                inventoryItemId: inventoryItem.id,
+                quantityBefore: qtyBefore,
+                quantityAfter: qtyAfter,
+                changeQty: item.quantity,
+                type: 'RESTOCK',
+                reason: `Payment rejected for Order #${order.orderNumber} - Stock restored`,
+                orderId: order.id,
+                userId: staffUserId,
+              },
+            });
+          }
+        }
+      }
+
+      // Record OrderStatusHistory
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          previousStatus,
+          newStatus,
+          changedByUserId: staffUserId,
+          note: approve
+            ? 'Payment verified and approved by staff.'
+            : (reason || 'Payment verification rejected by staff.'),
+        },
+      });
+
+      return tx.order.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: newPaymentStatus,
+          status: newStatus,
+        },
+        include: {
+          orderItems: { include: { menuItem: true } },
+          user: { select: { id: true, name: true, email: true } },
+          etaPrediction: true,
+        },
+      });
+    });
+
+    // Notify all realtime layers
+    emitToUser(updatedOrder.userId, 'order:update', updatedOrder);
+    emitToVendor('order:update', updatedOrder);
+    emitToAdmin('order:update', updatedOrder);
+
+    if (approve) {
+      // Send directly to kitchen queue
+      emitToKitchen('order:new', updatedOrder);
+      sendPaymentConfirmedEmail(updatedOrder).catch((err) =>
+        console.error('[Email] Payment confirmed email error:', err.message)
+      );
+    } else {
+      sendOrderCancellationEmail(updatedOrder, 'PAYMENT_FAILED').catch((err) =>
+        console.error('[Email] Payment failed email error:', err.message)
+      );
+    }
+
+    await logAudit({
+      userId: staffUserId,
+      action: approve ? 'PAYMENT_VERIFIED' : 'PAYMENT_REJECTED',
+      entity: 'Order',
+      entityId: order.id,
+      oldValue: { status: previousStatus, paymentStatus: order.paymentStatus },
+      newValue: { status: newStatus, paymentStatus: newPaymentStatus },
+      req,
+    });
+
+    return res.json({
+      message: approve ? 'Payment verified and order sent to kitchen.' : 'Payment rejected.',
+      order: updatedOrder,
+    });
+  } catch (error) {
+    console.error('Verify payment error:', error);
+    return res.status(500).json({ error: 'Failed to verify transaction.' });
+  }
+};
+
+module.exports = {
+  getPaymentSettings,
+  updatePaymentSettings,
+  submitTransactionId,
+  verifyTransaction,
+};

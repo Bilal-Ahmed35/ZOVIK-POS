@@ -1,0 +1,146 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import List, Optional
+import os
+import numpy as np
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+from model import forecast_demand
+
+app = FastAPI(
+    title="AI POS Inventory Forecasting API",
+    description="Python FastAPI service for ML-powered inventory demand prediction & ETA prediction",
+    version="1.0.0"
+)
+
+# Train the ETA model at startup
+print("Training RandomForest ETA model...")
+eta_model = None
+try:
+    def train_eta_model():
+        np.random.seed(42)
+        n_samples = 200
+        base_etas = np.random.uniform(3, 20, n_samples)
+        queue_lengths = np.random.randint(0, 15, n_samples)
+        hours = np.random.randint(8, 22, n_samples)
+        days = np.random.randint(0, 7, n_samples)
+        is_peak = np.array([1 if h in [12, 13, 18, 19] else 0 for h in hours])
+        
+        kitchen_loads = []
+        for q in queue_lengths:
+            if q <= 3: kitchen_loads.append(0)
+            elif q <= 7: kitchen_loads.append(1)
+            else: kitchen_loads.append(2)
+        kitchen_loads = np.array(kitchen_loads)
+        
+        historical_delays = np.random.uniform(-1, 5, n_samples)
+        noise = np.random.normal(0, 1.0, n_samples)
+        actual_times = base_etas + (queue_lengths * 1.2) + (is_peak * 3.0) + (kitchen_loads * 2.0) + historical_delays + noise
+        actual_times = np.clip(actual_times, 2.0, None)
+        
+        df = pd.DataFrame({
+            'base_eta': base_etas,
+            'queue_length': queue_lengths,
+            'hour': hours,
+            'day_of_week': days,
+            'is_peak_hour': is_peak,
+            'kitchen_load': kitchen_loads,
+            'historical_delay': historical_delays,
+            'actual_time': actual_times
+        })
+        
+        features = ['base_eta', 'queue_length', 'hour', 'day_of_week', 'is_peak_hour', 'kitchen_load', 'historical_delay']
+        model = RandomForestRegressor(n_estimators=50, random_state=42)
+        model.fit(df[features], df['actual_time'])
+        return model
+
+    eta_model = train_eta_model()
+    print("RandomForest ETA model trained successfully.")
+except Exception as e:
+    print(f"Error training RandomForest ETA model: {e}")
+
+class ForecastRequest(BaseModel):
+    item_name: str
+    weekday: int
+    month: int
+    season: int
+    promotions: int
+    exams_season: int
+    weather: int
+    historical_sales: Optional[List[float]] = None
+
+class ForecastResponse(BaseModel):
+    item_name: str
+    forecast: float
+    confidence: float
+    percent_change: float
+    note: str
+
+class ETARequest(BaseModel):
+    base_eta: float
+    queue_length: int
+    hour: int
+    day_of_week: int
+    is_peak_hour: int
+    kitchen_load: int  # 0: Low, 1: Medium, 2: High
+    historical_delay: float
+
+class ETAResponse(BaseModel):
+    estimated_time: float
+
+@app.get("/")
+def read_root():
+    return {
+        "service": "AI POS Inventory Forecasting API",
+        "status": "online",
+        "endpoints": ["/predict", "/predict-eta"]
+    }
+
+@app.post("/predict", response_model=ForecastResponse)
+def get_prediction(request: ForecastRequest):
+    target_features = {
+        'weekday': request.weekday,
+        'month': request.month,
+        'season': request.season,
+        'promotions': request.promotions,
+        'exams_season': request.exams_season,
+        'weather': request.weather
+    }
+    
+    result = forecast_demand(request.item_name, target_features, request.historical_sales)
+    
+    return ForecastResponse(
+        item_name=request.item_name,
+        forecast=result["forecast"],
+        confidence=result["confidence"],
+        percent_change=result.get("percent_change", 0.0),
+        note=result["note"]
+    )
+
+@app.post("/predict-eta", response_model=ETAResponse)
+def predict_eta(request: ETARequest):
+    if eta_model is None:
+        # Simple math fallback if model training failed
+        fallback = request.base_eta + (request.queue_length * 1.2) + (request.is_peak_hour * 3.0) + (request.kitchen_load * 2.0) + request.historical_delay
+        return ETAResponse(estimated_time=float(max(2.0, fallback)))
+    
+    try:
+        features = [[
+            request.base_eta,
+            request.queue_length,
+            request.hour,
+            request.day_of_week,
+            request.is_peak_hour,
+            request.kitchen_load,
+            request.historical_delay
+        ]]
+        prediction = eta_model.predict(features)[0]
+        return ETAResponse(estimated_time=float(max(2.0, prediction)))
+    except Exception as e:
+        # Fallback formula
+        fallback = request.base_eta + (request.queue_length * 1.2) + (request.is_peak_hour * 3.0) + (request.kitchen_load * 2.0) + request.historical_delay
+        return ETAResponse(estimated_time=float(max(2.0, fallback)))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

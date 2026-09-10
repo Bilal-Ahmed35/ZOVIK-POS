@@ -1,0 +1,27 @@
+const express = require('express');
+const {
+  createOrder,
+  updateOrderStatus,
+  getAllOrders,
+  getOrderById,
+  getOrderByTrackingToken,
+  transferSingleOrderTable,
+} = require('../controllers/orderController');
+const authMiddleware = require('../middleware/authMiddleware');
+const roleMiddleware = require('../middleware/roleMiddleware');
+
+const router = express.Router();
+
+// Public Order Tracking via Dynamic QR token
+router.get('/track/:token', getOrderByTrackingToken);
+
+// Protected Order Management Endpoints
+router.use(authMiddleware);
+
+router.post('/', createOrder);
+router.get('/', getAllOrders);
+router.get('/:id', getOrderById);
+router.put('/:id/status', roleMiddleware(['ADMIN', 'VENDOR', 'KITCHEN', 'CUSTOMER']), updateOrderStatus);
+router.put('/:id/transfer-table', transferSingleOrderTable);
+
+module.exports = router;

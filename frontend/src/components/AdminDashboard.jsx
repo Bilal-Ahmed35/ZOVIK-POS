@@ -1,0 +1,235 @@
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import api from '../services/api';
+import { getSocket } from '../services/socket';
+import AdminLayout from './admin/AdminLayout';
+
+// Import Views
+import AdminHomeView from './admin/views/AdminHomeView';
+import AdminOrdersView from './admin/views/AdminOrdersView';
+import AdminPaymentsView from './admin/views/AdminPaymentsView';
+import AdminMenuView from './admin/views/AdminMenuView';
+import AdminInventoryView from './admin/views/AdminInventoryView';
+import AdminStaffView from './admin/views/AdminStaffView';
+import AdminCustomersView from './admin/views/AdminCustomersView';
+import AdminTablesQRView from './admin/views/AdminTablesQRView';
+import AdminPaymentAvailabilityView from './admin/views/AdminPaymentAvailabilityView';
+import AdminKitchenMonitorView from './admin/views/AdminKitchenMonitorView';
+import AdminAIInsightsView from './admin/views/AdminAIInsightsView';
+import AdminReportsView from './admin/views/AdminReportsView';
+import AdminNotificationsView from './admin/views/AdminNotificationsView';
+import AdminAuditLogsView from './admin/views/AdminAuditLogsView';
+import AdminOrderStatusHistoryView from './admin/views/AdminOrderStatusHistoryView';
+import AdminBranchesView from './admin/views/AdminBranchesView';
+
+const AdminDashboard = ({ user, onLogout }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Determine active tab from URL path
+  const subPath = location.pathname.replace(/^\/admin\/?/, '');
+  const activeTab = subPath || 'dashboard';
+
+  const handleSelectTab = (tabId) => {
+    if (tabId === 'dashboard') navigate('/admin');
+    else navigate(`/admin/${tabId}`);
+  };
+
+  const [period, setPeriod] = useState('day');
+  const [stats, setStats] = useState(null);
+  const [menuItems, setMenuItems] = useState([]);
+  const [inventory, setInventory] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [alerts, setAlerts] = useState([]);
+  const [alertsContext, setAlertsContext] = useState(null);
+  const [adminOrders, setAdminOrders] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [forecastingLoading, setForecastingLoading] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg, type = 'success') => {
+    setToastMessage({ text: msg, type });
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const [statsRes, menuRes, invRes, logsRes, alertsRes, ordersRes, auditRes] = await Promise.all([
+        api.get(`/admin/stats?period=${period}`),
+        api.get('/menu?all=true'),
+        api.get('/inventory'),
+        api.get('/inventory/logs'),
+        api.get('/inventory/alerts'),
+        api.get('/orders'),
+        api.get('/admin/audit-logs'),
+      ]);
+
+      setStats(statsRes.data);
+      setMenuItems(menuRes.data.items || []);
+      setInventory(invRes.data.items || []);
+      setLogs(logsRes.data.logs || []);
+      setAlerts(alertsRes.data.alerts || []);
+      setAlertsContext(alertsRes.data.context || null);
+      setAdminOrders(ordersRes.data.orders || []);
+      setAuditLogs(auditRes.data.logs || []);
+    } catch (err) {
+      console.error('Fetch admin dashboard data error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchLightData = async () => {
+    try {
+      const [statsRes, menuRes, invRes, ordersRes] = await Promise.all([
+        api.get(`/admin/stats?period=${period}`),
+        api.get('/menu?all=true'),
+        api.get('/inventory'),
+        api.get('/orders'),
+      ]);
+      setStats(statsRes.data);
+      setMenuItems(menuRes.data.items || []);
+      setInventory(invRes.data.items || []);
+      setAdminOrders(ordersRes.data.orders || []);
+    } catch (err) {
+      console.error('Fetch light data error:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user && user.role === 'ADMIN') {
+      fetchDashboardData();
+    }
+  }, [user, period]);
+
+  // Real-time socket sync
+  useEffect(() => {
+    const socket = getSocket();
+    if (socket) {
+      const handleRealtimeSync = () => {
+        if (user && user.role === 'ADMIN') {
+          fetchLightData();
+        }
+      };
+
+      socket.on('order:new', handleRealtimeSync);
+      socket.on('order:update', handleRealtimeSync);
+      socket.on('payment:verify', handleRealtimeSync);
+      socket.on('inventory:update', handleRealtimeSync);
+      socket.on('menu:update', handleRealtimeSync);
+
+      return () => {
+        socket.off('order:new', handleRealtimeSync);
+        socket.off('order:update', handleRealtimeSync);
+        socket.off('payment:verify', handleRealtimeSync);
+        socket.off('inventory:update', handleRealtimeSync);
+        socket.off('menu:update', handleRealtimeSync);
+      };
+    }
+  }, [user, period]);
+
+  const handleRecalculateAI = async () => {
+    setForecastingLoading(true);
+    try {
+      await api.post('/inventory/recalculate-forecasts');
+      const alertsRes = await api.get('/inventory/alerts');
+      setAlerts(alertsRes.data.alerts || []);
+      setAlertsContext(alertsRes.data.context || null);
+      showToast('AI Demand forecasts recalculated successfully!');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to recalculate forecasts', 'error');
+    } finally {
+      setForecastingLoading(false);
+    }
+  };
+
+  return (
+    <AdminLayout
+      activeTab={activeTab}
+      onSelectTab={handleSelectTab}
+      user={user}
+      onLogout={onLogout}
+      onRefresh={fetchDashboardData}
+    >
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div
+          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-2xl shadow-2xl font-bold text-xs border backdrop-blur-md animate-slide-down ${
+            toastMessage.type === 'error'
+              ? 'bg-rose-500/90 text-white border-rose-400/40'
+              : 'bg-emerald-600/90 text-white border-emerald-400/40'
+          }`}
+        >
+          {toastMessage.text}
+        </div>
+      )}
+
+      {/* Render Active View Component */}
+      {activeTab === 'dashboard' && (
+        <AdminHomeView
+          stats={stats}
+          period={period}
+          setPeriod={setPeriod}
+          onNavigate={handleSelectTab}
+          onRecalculateAI={handleRecalculateAI}
+          forecastingLoading={forecastingLoading}
+        />
+      )}
+
+      {activeTab === 'orders' && (
+        <AdminOrdersView orders={adminOrders} loading={loading} onRefresh={fetchDashboardData} />
+      )}
+
+      {activeTab === 'payments' && (
+        <AdminPaymentsView orders={adminOrders} onRefresh={fetchDashboardData} showToast={showToast} />
+      )}
+
+      {activeTab === 'menu' && (
+        <AdminMenuView inventory={menuItems} onRefresh={fetchDashboardData} showToast={showToast} />
+      )}
+
+      {activeTab === 'inventory' && (
+        <AdminInventoryView inventory={inventory} logs={logs} onRefresh={fetchDashboardData} showToast={showToast} />
+      )}
+
+      {activeTab === 'staff' && <AdminStaffView showToast={showToast} />}
+
+      {activeTab === 'customers' && <AdminCustomersView showToast={showToast} />}
+
+      {activeTab === 'tables' && <AdminTablesQRView showToast={showToast} />}
+
+      {activeTab === 'payment-availability' && <AdminPaymentAvailabilityView showToast={showToast} />}
+
+      {activeTab === 'kitchen' && <AdminKitchenMonitorView orders={adminOrders} />}
+
+      {activeTab === 'ai-insights' && (
+        <AdminAIInsightsView
+          stats={stats}
+          alerts={alerts}
+          alertsContext={alertsContext}
+          onRecalculateAI={handleRecalculateAI}
+          forecastingLoading={forecastingLoading}
+        />
+      )}
+
+      {activeTab === 'reports' && (
+        <AdminReportsView stats={stats} orders={adminOrders} inventory={inventory} period={period} setPeriod={setPeriod} />
+      )}
+
+      {activeTab === 'notifications' && (
+        <AdminNotificationsView stats={stats} orders={adminOrders} onNavigate={handleSelectTab} />
+      )}
+
+      {activeTab === 'audit-logs' && <AdminAuditLogsView logs={auditLogs} loading={loading} />}
+
+      {activeTab === 'order-history' && <AdminOrderStatusHistoryView showToast={showToast} />}
+
+      {activeTab === 'branches' && <AdminBranchesView showToast={showToast} />}
+    </AdminLayout>
+  );
+};
+
+export default AdminDashboard;

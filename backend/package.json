@@ -1,0 +1,33 @@
+{
+  "name": "pos-backend",
+  "version": "1.0.0",
+  "description": "Backend API service for AI-Powered POS System",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "db:migrate": "npx prisma migrate dev",
+    "db:generate": "npx prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.10.2",
+    "@supabase/supabase-js": "^2.116.0",
+    "axios": "^1.6.7",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^8.0.10",
+    "pg": "^8.23.0",
+    "qrcode": "^1.5.3",
+    "socket.io": "^4.7.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0",
+    "prisma": "^5.10.2"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  }
+}
