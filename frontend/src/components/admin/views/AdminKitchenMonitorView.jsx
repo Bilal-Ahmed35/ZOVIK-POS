@@ -23,13 +23,13 @@ const AdminKitchenMonitorView = ({ orders = [] }) => {
       <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-6 rounded-2xl shadow-xl flex justify-between items-center">
         <div>
           <h2 className="text-xl font-extrabold text-[var(--text-main)] font-display flex items-center space-x-2">
-            <ChefHat className="w-5 h-5 text-indigo-400" />
+            <ChefHat className="w-5 h-5 text-orange-400" />
             <span>Kitchen Operations Oversight Monitor</span>
           </h2>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Live read-only oversight monitor for kitchen order preparation workflow.</p>
         </div>
 
-        <span className="px-3 py-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full text-xs font-black uppercase tracking-wider">
+        <span className="px-3 py-1 bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-full text-xs font-black uppercase tracking-wider">
           {kitchenQueue.length} Orders Active
         </span>
       </div>
@@ -51,7 +51,7 @@ const AdminKitchenMonitorView = ({ orders = [] }) => {
               <div key={order.id} className="p-4 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl space-y-3 shadow-md">
                 <div className="flex justify-between items-start">
                   <div>
-                    <strong className="font-mono font-extrabold text-indigo-400 block">{order.orderNumber}</strong>
+                    <strong className="font-mono font-extrabold text-orange-400 block">{order.orderNumber}</strong>
                     <span className="text-xs font-bold text-[var(--text-main)]">{order.tableNumber || (order.tableId ? `Table ${order.tableId}` : 'Takeaway')}</span>
                   </div>
                   <span className="text-[10px] text-[var(--text-muted)] font-mono">
@@ -69,7 +69,7 @@ const AdminKitchenMonitorView = ({ orders = [] }) => {
 
                 <div className="pt-2 border-t border-[var(--border-color)] flex justify-between items-center text-[10px] text-[var(--text-muted)]">
                   <span className="flex items-center space-x-1">
-                    <BrainCircuit className="w-3 h-3 text-indigo-400" />
+                    <BrainCircuit className="w-3 h-3 text-orange-400" />
                     <span>AI ETA: ~{order.estimatedPrepTime || 15} mins</span>
                   </span>
                 </div>
@@ -132,18 +132,18 @@ const AdminKitchenMonitorView = ({ orders = [] }) => {
         <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] rounded-2xl p-4 space-y-4 shadow-xl">
           <div className="flex justify-between items-center pb-3 border-b border-[var(--border-color)]">
             <h3 className="font-extrabold text-sm text-[var(--text-main)] flex items-center space-x-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+              <span className="w-2.5 h-2.5 rounded-full bg-orange-400" />
               <span>READY ({readyOrders.length})</span>
             </h3>
-            <span className="text-[10px] font-bold text-blue-400 bg-blue-500/20 px-2 py-0.5 rounded">Ready for Pickup</span>
+            <span className="text-[10px] font-bold text-orange-400 bg-orange-500/20 px-2 py-0.5 rounded">Ready for Pickup</span>
           </div>
 
           <div className="space-y-3">
             {readyOrders.map((order) => (
-              <div key={order.id} className="p-4 bg-[var(--bg-color)] border border-blue-500/30 rounded-xl space-y-3 shadow-md">
+              <div key={order.id} className="p-4 bg-[var(--bg-color)] border border-orange-500/30 rounded-xl space-y-3 shadow-md">
                 <div className="flex justify-between items-start">
                   <div>
-                    <strong className="font-mono font-extrabold text-blue-400 block">{order.orderNumber}</strong>
+                    <strong className="font-mono font-extrabold text-orange-400 block">{order.orderNumber}</strong>
                     <span className="text-xs font-bold text-[var(--text-main)]">{order.tableNumber || (order.tableId ? `Table ${order.tableId}` : 'Takeaway')}</span>
                   </div>
                   <span className="text-[10px] text-[var(--text-muted)] font-mono">
@@ -159,7 +159,7 @@ const AdminKitchenMonitorView = ({ orders = [] }) => {
                   ))}
                 </div>
 
-                <div className="pt-2 border-t border-[var(--border-color)] text-[10px] text-blue-400 font-bold">
+                <div className="pt-2 border-t border-[var(--border-color)] text-[10px] text-orange-400 font-bold">
                   ✓ Ready at counter
                 </div>
               </div>

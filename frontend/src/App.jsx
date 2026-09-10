@@ -178,16 +178,16 @@ function App() {
       {!isCustomerRoute && (
         <div className="bg-[var(--card-bg)] border-b border-[var(--border-color)] px-6 py-3 flex justify-between items-center z-40 transition-colors duration-300 shadow-sm">
           <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
-            <span className="text-xs text-indigo-500 font-extrabold tracking-wider uppercase">
-              SwipeBite System
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
+            <span className="text-xs text-orange-500 font-extrabold tracking-wider uppercase">
+              ZovikPOS System
             </span>
           </div>
 
           <div className="flex items-center space-x-4 text-xs">
             <div className="flex items-center space-x-2">
               <span className="font-semibold text-[var(--text-main)]">{user.name}</span>
-              <span className="px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 text-[10px] font-bold uppercase border border-indigo-500/20">
+              <span className="px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 text-[10px] font-bold uppercase border border-orange-500/20">
                 {user.role}
               </span>
             </div>
@@ -203,7 +203,7 @@ function App() {
             {user.role === 'CUSTOMER' ? (
               <button
                 onClick={() => navigate('/login')}
-                className="flex items-center space-x-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg font-bold transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+                className="flex items-center space-x-1.5 bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded-lg font-bold transition-all shadow-md shadow-orange-600/20 cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span>Staff Login</span>

@@ -84,7 +84,7 @@ const AdminLayout = ({ activeTab, onSelectTab, user, onLogout, children, onRefre
 
               {/* Branch Selector Dropdown */}
               <div className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-[var(--card-bg)] border border-[var(--border-color)] text-xs text-[var(--text-muted)] font-bold shadow-sm">
-                <Building2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                <Building2 className="w-4 h-4 text-orange-400 shrink-0" />
                 <select
                   value={selectedBranch}
                   onChange={(e) => setSelectedBranch(e.target.value)}
@@ -99,10 +99,10 @@ const AdminLayout = ({ activeTab, onSelectTab, user, onLogout, children, onRefre
               {onRefresh && (
                 <button
                   onClick={onRefresh}
-                  className="p-2 rounded-xl bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer shadow-sm hover:border-indigo-500/40"
+                  className="p-2 rounded-xl bg-[var(--card-bg)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer shadow-sm hover:border-orange-500/40"
                   title="Refresh Page Data"
                 >
-                  <RefreshCw className="w-4 h-4 text-indigo-400" />
+                  <RefreshCw className="w-4 h-4 text-orange-400" />
                 </button>
               )}
             </div>

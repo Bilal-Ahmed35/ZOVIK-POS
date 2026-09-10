@@ -44,7 +44,7 @@ const AdminOrderStatusHistoryView = ({ showToast }) => {
       {/* Header Bar */}
       <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-6 rounded-2xl shadow-xl">
         <h2 className="text-xl font-extrabold text-[var(--text-main)] font-display flex items-center space-x-2">
-          <History className="w-5 h-5 text-indigo-400" />
+          <History className="w-5 h-5 text-orange-400" />
           <span>Order Status Transition History Timeline</span>
         </h2>
         <p className="text-xs text-[var(--text-muted)] mt-0.5">Auditable timeline showing exact status changes, user accounts, roles, and timestamps per order.</p>
@@ -58,7 +58,7 @@ const AdminOrderStatusHistoryView = ({ showToast }) => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search by Order #, Status, or User..."
-          className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+          className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
         />
       </div>
 
@@ -89,13 +89,13 @@ const AdminOrderStatusHistoryView = ({ showToast }) => {
               <tbody className="divide-y divide-[var(--border-color)]">
                 {filteredHistory.map((h) => (
                   <tr key={h.id} className="hover:bg-[var(--bg-color)]/40 transition-colors">
-                    <td className="p-4 font-mono font-extrabold text-indigo-400">{h.order?.orderNumber || `Order #${h.orderId}`}</td>
+                    <td className="p-4 font-mono font-extrabold text-orange-400">{h.order?.orderNumber || `Order #${h.orderId}`}</td>
                     <td className="p-4">
                       <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--bg-color)] border border-[var(--border-color)]">
                         {h.fromStatus || 'INITIAL'}
                       </span>
                     </td>
-                    <td className="p-4 text-indigo-400">
+                    <td className="p-4 text-orange-400">
                       <ArrowRight className="w-4 h-4" />
                     </td>
                     <td className="p-4">
@@ -104,7 +104,7 @@ const AdminOrderStatusHistoryView = ({ showToast }) => {
                       </span>
                     </td>
                     <td className="p-4 font-bold text-[var(--text-main)]">{h.changedByUser?.name || h.changedByUser?.email || 'System'}</td>
-                    <td className="p-4 uppercase font-bold text-indigo-400 text-[10px]">{h.changedByUser?.role || 'SYSTEM'}</td>
+                    <td className="p-4 uppercase font-bold text-orange-400 text-[10px]">{h.changedByUser?.role || 'SYSTEM'}</td>
                     <td className="p-4 text-[11px] text-[var(--text-muted)]">{new Date(h.createdAt).toLocaleString()}</td>
                   </tr>
                 ))}

@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-const QR_SECRET = process.env.QR_SECRET || 'swipebite_pos_qr_cryptographic_secret_2026';
+const QR_SECRET = process.env.QR_SECRET || 'zovikpos_qr_cryptographic_secret_2026';
 
 /**
  * Safe buffer equality check that doesn't throw if lengths differ

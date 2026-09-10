@@ -48,7 +48,7 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
       {/* Top Header Controls & Date Filter */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[var(--card-bg)]/40 backdrop-blur-xl border border-[var(--border-color)] p-4 sm:p-6 rounded-2xl shadow-xl">
         <div>
-          <span className="px-2.5 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
+          <span className="px-2.5 py-0.5 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-md text-[10px] font-extrabold tracking-wider uppercase">
             Overview Summary
           </span>
           <h2 className="text-xl font-extrabold text-[var(--text-main)] mt-1 font-display">Executive Dashboard</h2>
@@ -68,7 +68,7 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
               onClick={() => setPeriod(item.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
                 period === item.id
-                  ? 'bg-indigo-600 text-white shadow-md'
+                  ? 'bg-orange-600 text-white shadow-md'
                   : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
@@ -100,13 +100,13 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
         <div className="bg-[var(--card-bg)]/50 backdrop-blur-xl border border-[var(--border-color)] p-5 rounded-2xl shadow-lg space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-[10px] uppercase font-black tracking-wider text-[var(--text-muted)]">Active Orders</span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center">
               <ShoppingCart className="w-4 h-4" />
             </div>
           </div>
           <div>
             <h3 className="text-2xl font-extrabold text-[var(--text-main)] font-mono">{metrics.activeOrdersCount || 0} Orders</h3>
-            <span className="text-[10px] text-indigo-400 font-bold block mt-1">Pending Handoff / Preparation</span>
+            <span className="text-[10px] text-orange-400 font-bold block mt-1">Pending Handoff / Preparation</span>
           </div>
         </div>
 
@@ -114,12 +114,12 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
         <div className="bg-[var(--card-bg)]/50 backdrop-blur-xl border border-[var(--border-color)] p-5 rounded-2xl shadow-lg space-y-3">
           <div className="flex justify-between items-center">
             <span className="text-[10px] uppercase font-black tracking-wider text-[var(--text-muted)]">AI ETA Accuracy</span>
-            <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center">
               <BrainCircuit className="w-4 h-4" />
             </div>
           </div>
           <div>
-            <h3 className="text-2xl font-extrabold text-purple-400 font-mono">{metrics.etaAccuracy || 94.2}%</h3>
+            <h3 className="text-2xl font-extrabold text-orange-400 font-mono">{metrics.etaAccuracy || 94.2}%</h3>
             <span className="text-[10px] text-[var(--text-muted)] block mt-1">Avg Prep Time: {metrics.avgPrepTime || 8.5} mins</span>
           </div>
         </div>
@@ -155,7 +155,7 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
             </div>
             <button
               onClick={() => onNavigate('reports')}
-              className="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all cursor-pointer"
+              className="px-3 py-1.5 bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-xl text-xs font-bold hover:bg-orange-500/20 transition-all cursor-pointer"
             >
               Full Financial Reports →
             </button>
@@ -212,7 +212,7 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
                   </div>
                   <button
                     onClick={() => onNavigate('inventory')}
-                    className="px-2.5 py-1 bg-indigo-600 text-white text-[10px] font-bold rounded-lg hover:bg-indigo-500 transition-all cursor-pointer"
+                    className="px-2.5 py-1 bg-orange-600 text-white text-[10px] font-bold rounded-lg hover:bg-orange-500 transition-all cursor-pointer"
                   >
                     Restock
                   </button>
@@ -246,7 +246,7 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
               <Flame className="w-4 h-4 text-amber-400" />
               <span>Top Selling Menu Items</span>
             </h3>
-            <button onClick={() => onNavigate('menu')} className="text-xs text-indigo-400 hover:underline font-bold cursor-pointer">
+            <button onClick={() => onNavigate('menu')} className="text-xs text-orange-400 hover:underline font-bold cursor-pointer">
               Manage Catalog →
             </button>
           </div>
@@ -259,7 +259,7 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
                   <span className="text-[var(--text-muted)] text-[10px]">Category: {item.category}</span>
                 </div>
                 <div className="text-right">
-                  <strong className="text-indigo-400 font-bold">{item.quantity} sold</strong>
+                  <strong className="text-orange-400 font-bold">{item.quantity} sold</strong>
                   <span className="text-[10px] text-[var(--text-muted)] block">Rs. {item.revenue.toFixed(2)}</span>
                 </div>
               </div>
@@ -271,13 +271,13 @@ const AdminHomeView = ({ stats, period, setPeriod, onNavigate, onRecalculateAI, 
         <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-6 rounded-2xl shadow-xl space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-sm font-black text-[var(--text-main)] flex items-center space-x-2">
-              <BrainCircuit className="w-4 h-4 text-indigo-400" />
+              <BrainCircuit className="w-4 h-4 text-orange-400" />
               <span>AI Inventory Recommendations</span>
             </h3>
             <button
               onClick={onRecalculateAI}
               disabled={forecastingLoading}
-              className="px-2.5 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-[10px] font-bold cursor-pointer transition-all flex items-center space-x-1"
+              className="px-2.5 py-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 rounded-lg text-[10px] font-bold cursor-pointer transition-all flex items-center space-x-1"
             >
               <RefreshCw className={`w-3 h-3 ${forecastingLoading ? 'animate-spin' : ''}`} />
               <span>{forecastingLoading ? 'Calculating...' : 'Recalculate AI'}</span>

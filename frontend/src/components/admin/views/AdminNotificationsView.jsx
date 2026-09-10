@@ -57,7 +57,7 @@ const AdminNotificationsView = ({ stats, orders = [], onNavigate }) => {
       <div className="flex justify-between items-center bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-6 rounded-2xl shadow-xl">
         <div>
           <h2 className="text-xl font-extrabold text-[var(--text-main)] font-display flex items-center space-x-2">
-            <Bell className="w-5 h-5 text-indigo-400" />
+            <Bell className="w-5 h-5 text-orange-400" />
             <span>System Notifications & Action Center</span>
           </h2>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Urgent operations alerts requiring administrator attention.</p>
@@ -77,13 +77,13 @@ const AdminNotificationsView = ({ stats, orders = [], onNavigate }) => {
               n.severity === 'CRITICAL'
                 ? 'bg-rose-500/10 border-rose-500/30'
                 : n.severity === 'HIGH'
-                ? 'bg-indigo-500/10 border-indigo-500/30'
+                ? 'bg-orange-500/10 border-orange-500/30'
                 : 'bg-amber-500/10 border-amber-500/30'
             }`}
           >
             <div className="flex items-start space-x-3">
-              <div className="p-2.5 rounded-xl bg-[var(--card-bg)] border border-[var(--border-color)] text-indigo-400 shrink-0">
-                {n.type === 'STOCK' ? <Package className="w-5 h-5 text-amber-400" /> : <CreditCard className="w-5 h-5 text-indigo-400" />}
+              <div className="p-2.5 rounded-xl bg-[var(--card-bg)] border border-[var(--border-color)] text-orange-400 shrink-0">
+                {n.type === 'STOCK' ? <Package className="w-5 h-5 text-amber-400" /> : <CreditCard className="w-5 h-5 text-orange-400" />}
               </div>
               <div>
                 <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
@@ -100,7 +100,7 @@ const AdminNotificationsView = ({ stats, orders = [], onNavigate }) => {
             <div className="flex items-center space-x-2 shrink-0">
               <button
                 onClick={() => onNavigate(n.targetTab)}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs transition-all shadow-md cursor-pointer"
+                className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold text-xs transition-all shadow-md cursor-pointer"
               >
                 Inspect →
               </button>

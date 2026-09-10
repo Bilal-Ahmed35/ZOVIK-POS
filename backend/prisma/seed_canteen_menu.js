@@ -1,5 +1,5 @@
 /**
- * Canteen Menu Seed — SwipeBite AI-Powered POS
+ * Canteen Menu Seed — ZovikPOS AI-Powered POS
  * Seeds all 36 real canteen menu items into Supabase.
  * Safe to re-run: clears existing items before seeding.
  */

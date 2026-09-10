@@ -49,13 +49,13 @@ const StaffLogin = ({ onLoginSuccess }) => {
   return (
     <div className="min-h-screen bg-[var(--bg-color)] text-[var(--text-main)] flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-300">
       {/* Ambient background glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-500/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-orange-500/10 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-10 right-10 w-[400px] h-[400px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="w-full max-w-md bg-[var(--card-bg)]/80 backdrop-blur-2xl border border-[var(--border-color)] p-8 rounded-3xl shadow-2xl space-y-6 relative z-10 animate-fade-in">
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-500 mb-2 shadow-inner">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-orange-600/10 border border-orange-500/20 text-orange-500 mb-2 shadow-inner">
             <Lock className="w-6 h-6" />
           </div>
           <h1 className="text-2xl font-black font-display text-[var(--text-main)] tracking-tight">Staff Portal Login</h1>
@@ -79,7 +79,7 @@ const StaffLogin = ({ onLoginSuccess }) => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="staff@pos.com"
-                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl px-4 py-3 pl-10 text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-indigo-500 transition-all"
+                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl px-4 py-3 pl-10 text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-all"
                 required
               />
               <Mail className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3.5" />
@@ -94,7 +94,7 @@ const StaffLogin = ({ onLoginSuccess }) => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl px-4 py-3 pl-10 text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-indigo-500 transition-all"
+                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl px-4 py-3 pl-10 text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-all"
                 required
               />
               <Lock className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3.5" />
@@ -104,7 +104,7 @@ const StaffLogin = ({ onLoginSuccess }) => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-indigo-600/20 cursor-pointer flex items-center justify-center space-x-2"
+            className="w-full py-3.5 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 disabled:opacity-50 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-orange-600/20 cursor-pointer flex items-center justify-center space-x-2"
           >
             <span>{loading ? 'Authenticating...' : 'Sign In to Workspace'}</span>
             <ArrowRight className="w-4 h-4" />
@@ -119,24 +119,24 @@ const StaffLogin = ({ onLoginSuccess }) => {
           <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => handleQuickFill('vendor@pos.com')}
-              className="p-2.5 bg-[var(--bg-color)] hover:bg-indigo-500/10 border border-[var(--border-color)] hover:border-indigo-500/20 rounded-xl text-left transition-all cursor-pointer group"
+              className="p-2.5 bg-[var(--bg-color)] hover:bg-orange-500/10 border border-[var(--border-color)] hover:border-orange-500/20 rounded-xl text-left transition-all cursor-pointer group"
             >
-              <UserCheck className="w-3.5 h-3.5 text-indigo-500 mb-1" />
-              <span className="text-[10px] font-bold block text-[var(--text-main)] group-hover:text-indigo-500">Cashier</span>
+              <UserCheck className="w-3.5 h-3.5 text-orange-500 mb-1" />
+              <span className="text-[10px] font-bold block text-[var(--text-main)] group-hover:text-orange-500">Cashier</span>
             </button>
             <button
               onClick={() => handleQuickFill('kitchen@pos.com')}
-              className="p-2.5 bg-[var(--bg-color)] hover:bg-purple-500/10 border border-[var(--border-color)] hover:border-purple-500/20 rounded-xl text-left transition-all cursor-pointer group"
+              className="p-2.5 bg-[var(--bg-color)] hover:bg-amber-500/10 border border-[var(--border-color)] hover:border-amber-500/20 rounded-xl text-left transition-all cursor-pointer group"
             >
-              <Flame className="w-3.5 h-3.5 text-purple-400 mb-1" />
-              <span className="text-[10px] font-bold block text-[var(--text-main)] group-hover:text-purple-400">Kitchen</span>
+              <Flame className="w-3.5 h-3.5 text-amber-400 mb-1" />
+              <span className="text-[10px] font-bold block text-[var(--text-main)] group-hover:text-amber-400">Kitchen</span>
             </button>
             <button
               onClick={() => handleQuickFill('admin@pos.com')}
-              className="p-2.5 bg-[var(--bg-color)] hover:bg-emerald-500/10 border border-[var(--border-color)] hover:border-emerald-500/20 rounded-xl text-left transition-all cursor-pointer group"
+              className="p-2.5 bg-[var(--bg-color)] hover:bg-orange-500/10 border border-[var(--border-color)] hover:border-orange-500/20 rounded-xl text-left transition-all cursor-pointer group"
             >
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 mb-1" />
-              <span className="text-[10px] font-bold block text-[var(--text-main)] group-hover:text-emerald-400">Admin</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-orange-400 mb-1" />
+              <span className="text-[10px] font-bold block text-[var(--text-main)] group-hover:text-orange-400">Admin</span>
             </button>
           </div>
         </div>

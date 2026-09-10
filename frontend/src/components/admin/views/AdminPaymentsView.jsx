@@ -157,7 +157,7 @@ const AdminPaymentsView = ({ orders = [], onRefresh, showToast }) => {
           </button>
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Export PDF</span>
@@ -178,7 +178,7 @@ const AdminPaymentsView = ({ orders = [], onRefresh, showToast }) => {
               key={item.id}
               onClick={() => setMethodTab(item.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                methodTab === item.id ? 'bg-indigo-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                methodTab === item.id ? 'bg-orange-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               {item.label}
@@ -194,7 +194,7 @@ const AdminPaymentsView = ({ orders = [], onRefresh, showToast }) => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search Order #, Email, TxID..."
-            className="w-full pl-10 pr-4 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full pl-10 pr-4 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-colors"
           />
         </div>
       </div>
@@ -227,7 +227,7 @@ const AdminPaymentsView = ({ orders = [], onRefresh, showToast }) => {
 
                   return (
                     <tr key={p.id} className="hover:bg-[var(--bg-color)]/40 transition-colors">
-                      <td className="p-4 font-mono font-extrabold text-indigo-400">{p.orderNumber}</td>
+                      <td className="p-4 font-mono font-extrabold text-orange-400">{p.orderNumber}</td>
                       <td className="p-4">
                         <span className="font-bold block text-[var(--text-main)]">{p.customerName}</span>
                         <span className="text-[10px] text-[var(--text-muted)] block">{p.customerEmail}</span>

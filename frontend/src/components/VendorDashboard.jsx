@@ -487,9 +487,9 @@ const VendorDashboard = ({ user, onLogout }) => {
   }, [menu, searchTerm, selectedCategory, stockFilter]);
 
   return (
-    <div className="min-h-screen bg-[#07080B] text-[#F3F4F6] p-4 sm:p-6 relative selection:bg-[#6366F1]/30 font-sans">
+    <div className="min-h-screen bg-[var(--bg-color)] text-[var(--text-main)] p-4 sm:p-6 relative selection:bg-[var(--sb-primary)]/30 font-sans">
       {/* Background radial glows */}
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#6366F1]/5 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[var(--sb-primary)]/5 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-emerald-500/4 rounded-full blur-[140px] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto space-y-5 relative z-10">
@@ -497,40 +497,40 @@ const VendorDashboard = ({ user, onLogout }) => {
         {/* ── 1. LIVE KDS & REVENUE QUICK-STATS BAR ───────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
           {/* Active Orders Queue */}
-          <div className="bg-[#0D0F17] border border-white/[0.08] p-4 rounded-2xl flex items-center space-x-3.5 shadow-lg">
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-[#818CF8] flex items-center justify-center shrink-0">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] p-4 rounded-2xl flex items-center space-x-3.5 shadow-lg">
+            <div className="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/20 text-[var(--sb-primary-warm)] flex items-center justify-center shrink-0">
               <ShoppingCart className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Active Queue</span>
-              <strong className="text-lg font-black text-white font-mono">{metrics.activeCount} orders</strong>
+              <span className="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-wider block">Active Queue</span>
+              <strong className="text-lg font-black text-[var(--text-main)] font-mono">{metrics.activeCount} orders</strong>
             </div>
           </div>
 
           {/* Pending Verifications */}
-          <div className="bg-[#0D0F17] border border-white/[0.08] p-4 rounded-2xl flex items-center space-x-3.5 shadow-lg">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] p-4 rounded-2xl flex items-center space-x-3.5 shadow-lg">
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
               <ShieldAlert className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Verifications</span>
+              <span className="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-wider block">Verifications</span>
               <strong className="text-lg font-black text-amber-400 font-mono">{metrics.verificationCount} pending</strong>
             </div>
           </div>
 
           {/* Today's Sales */}
-          <div className="bg-[#0D0F17] border border-white/[0.08] p-4 rounded-2xl flex items-center space-x-3.5 shadow-lg">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] p-4 rounded-2xl flex items-center space-x-3.5 shadow-lg">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
               <DollarSign className="w-5 h-5" />
             </div>
             <div>
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block">Approved Sales</span>
+              <span className="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-wider block">Approved Sales</span>
               <strong className="text-lg font-black text-emerald-400 font-mono">Rs. {metrics.todaySales.toFixed(0)}</strong>
             </div>
           </div>
 
           {/* Live Socket & Audio Controls */}
-          <div className="bg-[#0D0F17] border border-white/[0.08] p-4 rounded-2xl flex items-center justify-between shadow-lg">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] p-4 rounded-2xl flex items-center justify-between shadow-lg">
             <div className="flex items-center space-x-2">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -538,7 +538,7 @@ const VendorDashboard = ({ user, onLogout }) => {
               </span>
               <div>
                 <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-wider block">POS Live Sync</span>
-                <span className="text-[11px] text-slate-400 font-bold">Connected</span>
+                <span className="text-[11px] text-[var(--text-muted)] font-bold">Connected</span>
               </div>
             </div>
 
@@ -549,8 +549,8 @@ const VendorDashboard = ({ user, onLogout }) => {
               }}
               className={`p-2 rounded-xl border transition-all cursor-pointer ${
                 soundEnabled
-                  ? 'bg-indigo-500/15 border-indigo-500/30 text-[#818CF8]'
-                  : 'bg-white/[0.06] border-white/[0.08] text-slate-500'
+                  ? 'bg-orange-500/15 border-orange-500/30 text-[var(--sb-primary-warm)]'
+                  : 'bg-[var(--card-bg)] border-[var(--border-color)] text-[var(--text-muted)]'
               }`}
               title={soundEnabled ? 'Audio Alerts ON' : 'Audio Alerts OFF'}
             >
@@ -584,20 +584,20 @@ const VendorDashboard = ({ user, onLogout }) => {
         )}
 
         {/* ── 2. PAYMENT METHOD CONTROL SECTION ───────────────────────────────── */}
-        <div className="bg-[#0D0F17] border border-white/[0.08] rounded-2xl p-5 shadow-xl space-y-4">
-          <div className="flex justify-between items-center border-b border-white/[0.06] pb-3">
-            <h2 className="font-extrabold text-xs tracking-wider uppercase text-slate-300 font-display flex items-center space-x-2">
-              <Banknote className="w-4 h-4 text-[#6366F1]" />
+        <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl p-5 shadow-xl space-y-4">
+          <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
+            <h2 className="font-extrabold text-xs tracking-wider uppercase text-[var(--text-main)] font-display flex items-center space-x-2">
+              <Banknote className="w-4 h-4 text-[var(--sb-primary)]" />
               <span>Payment Method Control</span>
             </h2>
-            <span className="text-[11px] text-slate-400 font-medium">Customer Checkout Availability</span>
+            <span className="text-[11px] text-[var(--text-muted)] font-medium">Customer Checkout Availability</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Pay at Counter (COD) Card */}
-            <div className="p-4 bg-[#141724] border border-white/[0.06] rounded-xl flex items-center justify-between">
+            <div className="p-4 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl flex items-center justify-between">
               <div className="space-y-1.5">
-                <span className="text-sm font-bold text-white">💵 Pay at Counter (COD)</span>
+                <span className="text-sm font-bold text-[var(--text-main)]">💵 Pay at Counter (COD)</span>
                 <div>
                   <span
                     className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${
@@ -625,9 +625,9 @@ const VendorDashboard = ({ user, onLogout }) => {
             </div>
 
             {/* Online Payment Card */}
-            <div className="p-4 bg-[#141724] border border-white/[0.06] rounded-xl flex items-center justify-between">
+            <div className="p-4 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl flex items-center justify-between">
               <div className="space-y-1.5">
-                <span className="text-sm font-bold text-white">🌐 Online Payment</span>
+                <span className="text-sm font-bold text-[var(--text-main)]">🌐 Online Payment</span>
                 <div>
                   <span
                     className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded text-[10px] font-black uppercase ${
@@ -657,7 +657,7 @@ const VendorDashboard = ({ user, onLogout }) => {
         </div>
 
         {/* ── 3. SEGMENTED NAVIGATION TABS ────────────────────────────────────── */}
-        <div className="bg-[#0D0F17] border border-white/[0.08] p-1.5 rounded-2xl shadow-xl">
+        <div className="bg-[var(--card-bg)] border border-[var(--border-color)] p-1.5 rounded-2xl shadow-xl">
           <div className="flex flex-col sm:flex-row gap-1.5 w-full">
             {[
               { id: 'verification', label: 'Payment Verifications (Hotkey 1)', count: verificationOrders.length },
@@ -669,8 +669,8 @@ const VendorDashboard = ({ user, onLogout }) => {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex-1 flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-xs font-extrabold transition-all duration-200 cursor-pointer ${
                   activeTab === tab.id
-                    ? 'bg-[#6366F1] text-white shadow-lg shadow-[#6366F1]/20 border border-[#818CF8]/30'
-                    : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+                    ? 'bg-[var(--sb-primary)] text-white shadow-lg shadow-[var(--sb-primary)]/20 border border-[var(--sb-primary-warm)]/30'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--card-bg)]'
                 }`}
               >
                 <span>{tab.label}</span>
@@ -679,7 +679,7 @@ const VendorDashboard = ({ user, onLogout }) => {
                     className={`ml-2 px-2 py-0.5 rounded-full text-[10px] font-black ${
                       activeTab === tab.id
                         ? 'bg-white/20 text-white'
-                        : 'bg-white/[0.08] text-indigo-300'
+                        : 'bg-white/[0.08] text-orange-300'
                     }`}
                   >
                     {tab.count}
@@ -694,10 +694,10 @@ const VendorDashboard = ({ user, onLogout }) => {
         {activeTab === 'verification' && (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {verificationOrders.length === 0 ? (
-              <div className="col-span-full py-16 text-center bg-[#0D0F17]/60 border border-white/[0.08] border-dashed rounded-3xl">
+              <div className="col-span-full py-16 text-center bg-[var(--card-bg)]/60 border border-[var(--border-color)] border-dashed rounded-3xl">
                 <ShieldAlert className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-sm font-bold text-white">No Pending Verifications</p>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                <p className="text-sm font-bold text-[var(--text-main)]">No Pending Verifications</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm mx-auto">
                   Orders with pending cash or mobile wallet payment details will appear here.
                 </p>
               </div>
@@ -705,42 +705,42 @@ const VendorDashboard = ({ user, onLogout }) => {
               verificationOrders.map((order) => (
                 <div
                   key={order.id}
-                  className="bg-[#0D0F17] border border-white/[0.08] hover:border-[#6366F1]/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg hover:shadow-2xl transition-all duration-200 hover:-translate-y-0.5"
+                  className="bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--sb-primary)]/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg hover:shadow-2xl transition-all duration-200 hover:-translate-y-0.5"
                 >
                   <div className="space-y-3.5">
-                    <div className="flex justify-between items-center border-b border-white/[0.06] pb-3">
+                    <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
                       <div>
-                        <span className="text-[10px] text-slate-400 font-mono tracking-wider">ORDER NUMBER</span>
-                        <h4 className="font-extrabold text-white text-base font-mono">{order.orderNumber || `#000${order.id}`}</h4>
+                        <span className="text-[10px] text-[var(--text-muted)] font-mono tracking-wider">ORDER NUMBER</span>
+                        <h4 className="font-extrabold text-[var(--text-main)] text-base font-mono">{order.orderNumber || `#000${order.id}`}</h4>
                       </div>
                       <span
                         className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border uppercase ${
                           order.paymentMethod === 'COD'
                             ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
-                            : 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20'
+                            : 'text-orange-400 bg-orange-500/10 border-orange-500/20'
                         }`}
                       >
                         {order.paymentMethod || 'COD'}
                       </span>
                     </div>
 
-                    <div className="p-3.5 bg-[#141724] rounded-xl border border-white/[0.06] space-y-2 text-xs">
+                    <div className="p-3.5 bg-[var(--bg-color)] rounded-xl border border-[var(--border-color)] space-y-2 text-xs">
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-400">TxID Ref:</span>
-                        <strong className="text-white font-mono select-all bg-[#0D0F17] px-2 py-0.5 rounded border border-white/[0.08]">
+                        <span className="text-[var(--text-muted)]">TxID Ref:</span>
+                        <strong className="text-[var(--text-main)] font-mono select-all bg-[var(--card-bg)] px-2 py-0.5 rounded border border-[var(--border-color)]">
                           {order.paymentTxId || 'COD / N/A'}
                         </strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Customer:</span>
-                        <strong className="text-white">{order.user?.name || 'Guest'}</strong>
+                        <span className="text-[var(--text-muted)]">Customer:</span>
+                        <strong className="text-[var(--text-main)]">{order.user?.name || 'Guest'}</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Location / Table:</span>
-                        <strong className="text-white">{order.tableNumber || order.tableId || 'Takeaway'}</strong>
+                        <span className="text-[var(--text-muted)]">Location / Table:</span>
+                        <strong className="text-[var(--text-main)]">{order.tableNumber || order.tableId || 'Takeaway'}</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Payment Status:</span>
+                        <span className="text-[var(--text-muted)]">Payment Status:</span>
                         <strong className="text-amber-400 font-bold uppercase text-[11px]">{order.paymentStatus}</strong>
                       </div>
                     </div>
@@ -748,7 +748,7 @@ const VendorDashboard = ({ user, onLogout }) => {
                     <div className="text-sm font-extrabold flex justify-between items-center pt-1">
                       <button
                         onClick={() => setSelectedOrder(order)}
-                        className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center space-x-1 cursor-pointer"
+                        className="text-xs text-orange-400 hover:text-orange-300 font-bold flex items-center space-x-1 cursor-pointer"
                       >
                         <FileText className="w-3.5 h-3.5" />
                         <span>View Details</span>
@@ -767,7 +767,7 @@ const VendorDashboard = ({ user, onLogout }) => {
                     </button>
                     <button
                       onClick={() => handleVerifyPayment(order.id)}
-                      className="flex-1 py-2.5 bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1"
+                      className="flex-1 py-2.5 bg-[var(--sb-primary)] hover:bg-[var(--sb-primary-hover)] text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1"
                     >
                       <Check className="w-3.5 h-3.5" />
                       <span>Verify &amp; Approve</span>
@@ -783,10 +783,10 @@ const VendorDashboard = ({ user, onLogout }) => {
         {activeTab === 'active' && (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
             {activeOrders.length === 0 ? (
-              <div className="col-span-full py-16 text-center bg-[#0D0F17]/60 border border-white/[0.08] border-dashed rounded-3xl">
+              <div className="col-span-full py-16 text-center bg-[var(--card-bg)]/60 border border-[var(--border-color)] border-dashed rounded-3xl">
                 <ShoppingCart className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-sm font-bold text-white">Active Queue Empty</p>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                <p className="text-sm font-bold text-[var(--text-main)]">Active Queue Empty</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm mx-auto">
                   Active paid and preparing orders will appear here as they flow from the kitchen.
                 </p>
               </div>
@@ -794,20 +794,20 @@ const VendorDashboard = ({ user, onLogout }) => {
               activeOrders.map((order) => (
                 <div
                   key={order.id}
-                  className="bg-[#0D0F17] border border-white/[0.08] hover:border-[#6366F1]/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg transition-all duration-200 hover:-translate-y-0.5"
+                  className="bg-[var(--card-bg)] border border-[var(--border-color)] hover:border-[var(--sb-primary)]/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg transition-all duration-200 hover:-translate-y-0.5"
                 >
                   <div className="space-y-3.5">
-                    <div className="flex justify-between items-center border-b border-white/[0.06] pb-3">
+                    <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
                       <div>
-                        <span className="text-[10px] text-slate-400 font-mono tracking-wider">ORDER NUMBER</span>
-                        <h4 className="font-extrabold text-white text-base font-mono">{order.orderNumber || `#000${order.id}`}</h4>
+                        <span className="text-[10px] text-[var(--text-muted)] font-mono tracking-wider">ORDER NUMBER</span>
+                        <h4 className="font-extrabold text-[var(--text-main)] text-base font-mono">{order.orderNumber || `#000${order.id}`}</h4>
                       </div>
                       <span
                         className={`px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold border ${
                           order.status === 'PAID'
-                            ? 'text-blue-400 bg-blue-500/15 border-blue-500/25'
+                            ? 'text-orange-400 bg-orange-500/15 border-orange-500/25'
                             : order.status === 'PREPARING'
-                            ? 'text-purple-400 bg-purple-500/15 border-purple-500/25'
+                            ? 'text-orange-400 bg-orange-500/15 border-orange-500/25'
                             : 'text-emerald-400 bg-emerald-500/15 border-emerald-500/25 animate-pulse'
                         }`}
                       >
@@ -815,18 +815,18 @@ const VendorDashboard = ({ user, onLogout }) => {
                       </span>
                     </div>
 
-                    <div className="text-xs text-slate-300 space-y-2 bg-[#141724] p-3.5 rounded-xl border border-white/[0.06]">
+                    <div className="text-xs text-[var(--text-main)] space-y-2 bg-[var(--bg-color)] p-3.5 rounded-xl border border-[var(--border-color)]">
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Customer:</span>
-                        <strong className="text-white">{order.user?.name || 'Guest'}</strong>
+                        <span className="text-[var(--text-muted)]">Customer:</span>
+                        <strong className="text-[var(--text-main)]">{order.user?.name || 'Guest'}</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Location / Table:</span>
-                        <strong className="text-white">{order.tableNumber || order.tableId || 'Takeaway'}</strong>
+                        <span className="text-[var(--text-muted)]">Location / Table:</span>
+                        <strong className="text-[var(--text-main)]">{order.tableNumber || order.tableId || 'Takeaway'}</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Items Count:</span>
-                        <strong className="text-indigo-400">
+                        <span className="text-[var(--text-muted)]">Items Count:</span>
+                        <strong className="text-orange-400">
                           {order.orderItems?.reduce((acc, it) => acc + it.quantity, 0) || 0} items
                         </strong>
                       </div>
@@ -835,7 +835,7 @@ const VendorDashboard = ({ user, onLogout }) => {
                     <div className="flex justify-between items-center text-xs">
                       <button
                         onClick={() => setSelectedOrder(order)}
-                        className="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center space-x-1 cursor-pointer"
+                        className="text-xs text-orange-400 hover:text-orange-300 font-bold flex items-center space-x-1 cursor-pointer"
                       >
                         <FileText className="w-3.5 h-3.5" />
                         <span>View Details</span>
@@ -848,7 +848,7 @@ const VendorDashboard = ({ user, onLogout }) => {
                     {order.status === 'PAID' && (
                       <button
                         onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
-                        className="w-full py-2.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        className="w-full py-2.5 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/30 text-orange-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
                       >
                         Send to Kitchen →
                       </button>
@@ -872,20 +872,20 @@ const VendorDashboard = ({ user, onLogout }) => {
         {activeTab === 'menu' && (
           <div className="space-y-5">
             {/* Header with Search, Refresh, Hotkey Tip & Add Button */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#0D0F17] border border-white/[0.08] p-5 rounded-2xl shadow-xl">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[var(--card-bg)] border border-[var(--border-color)] p-5 rounded-2xl shadow-xl">
               <div className="flex items-center space-x-3">
-                <h2 className="font-black text-xl text-white font-display">Menu Catalog</h2>
+                <h2 className="font-black text-xl text-[var(--text-main)] font-display">Menu Catalog</h2>
                 <button
                   onClick={() => {
                     fetchMenu();
                     showToast('Menu catalog refreshed!');
                   }}
-                  className="p-2 text-slate-400 hover:text-white hover:bg-white/[0.08] rounded-xl border border-white/[0.08] transition-all cursor-pointer"
+                  className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-white/[0.08] rounded-xl border border-[var(--border-color)] transition-all cursor-pointer"
                   title="Refresh Menu Catalog (Press R)"
                 >
-                  <RefreshCw className="w-4 h-4 text-indigo-400" />
+                  <RefreshCw className="w-4 h-4 text-orange-400" />
                 </button>
-                <span className="text-[10px] text-slate-500 font-mono hidden sm:inline-block bg-[#141724] px-2 py-1 rounded border border-white/[0.06]">
+                <span className="text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline-block bg-[var(--bg-color)] px-2 py-1 rounded border border-[var(--border-color)]">
                   Hotkey [R] to Refresh
                 </span>
               </div>
@@ -893,7 +893,7 @@ const VendorDashboard = ({ user, onLogout }) => {
               <div className="flex items-center space-x-3 w-full md:w-auto">
                 <button
                   onClick={handleOpenAddModal}
-                  className="w-full md:w-auto px-4 py-2.5 bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-xl text-xs font-extrabold shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1.5"
+                  className="w-full md:w-auto px-4 py-2.5 bg-[var(--sb-primary)] hover:bg-[var(--sb-primary-hover)] text-white rounded-xl text-xs font-extrabold shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1.5"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Add New Item</span>
@@ -902,22 +902,22 @@ const VendorDashboard = ({ user, onLogout }) => {
             </div>
 
             {/* SEARCH BAR & CATEGORY / STOCK FILTERS STRIP */}
-            <div className="bg-[#0D0F17] border border-white/[0.08] p-4 rounded-2xl space-y-3.5 shadow-xl">
+            <div className="bg-[var(--card-bg)] border border-[var(--border-color)] p-4 rounded-2xl space-y-3.5 shadow-xl">
               <div className="flex flex-col sm:flex-row justify-between gap-3">
                 {/* Search Bar Input */}
                 <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                  <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3" />
                   <input
                     type="text"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search menu item name (e.g. Biryani, Burger)..."
-                    className="w-full pl-10 pr-4 py-2 bg-[#141724] border border-white/[0.08] rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#6366F1] transition-colors"
+                    className="w-full pl-10 pr-4 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--sb-primary)] transition-colors"
                   />
                 </div>
 
                 {/* Stock Warning Quick Filters */}
-                <div className="flex items-center space-x-1.5 bg-[#141724] p-1 rounded-xl border border-white/[0.06] overflow-x-auto">
+                <div className="flex items-center space-x-1.5 bg-[var(--bg-color)] p-1 rounded-xl border border-[var(--border-color)] overflow-x-auto">
                   {[
                     { id: 'ALL', label: 'All Items' },
                     { id: 'AVAILABLE', label: 'Available' },
@@ -929,8 +929,8 @@ const VendorDashboard = ({ user, onLogout }) => {
                       onClick={() => setStockFilter(flt.id)}
                       className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold whitespace-nowrap transition-all cursor-pointer ${
                         stockFilter === flt.id
-                          ? 'bg-[#6366F1] text-white shadow-sm'
-                          : 'text-slate-400 hover:text-white'
+                          ? 'bg-[var(--sb-primary)] text-white shadow-sm'
+                          : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                       }`}
                     >
                       {flt.label}
@@ -947,8 +947,8 @@ const VendorDashboard = ({ user, onLogout }) => {
                     onClick={() => setSelectedCategory(cat)}
                     className={`px-3 py-1 rounded-lg text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
                       selectedCategory === cat
-                        ? 'bg-white/10 text-indigo-400 border border-indigo-500/30'
-                        : 'text-slate-400 hover:text-white hover:bg-white/[0.04]'
+                        ? 'bg-white/10 text-orange-400 border border-orange-500/30'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--card-bg)]'
                     }`}
                   >
                     {cat}
@@ -960,10 +960,10 @@ const VendorDashboard = ({ user, onLogout }) => {
             {/* Menu Catalog Product Cards Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredMenuItems.length === 0 ? (
-                <div className="col-span-full py-16 text-center bg-[#0D0F17]/60 border border-white/[0.08] border-dashed rounded-3xl">
+                <div className="col-span-full py-16 text-center bg-[var(--card-bg)]/60 border border-[var(--border-color)] border-dashed rounded-3xl">
                   <Utensils className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-white">No Matching Menu Items</p>
-                  <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  <p className="text-sm font-bold text-[var(--text-main)]">No Matching Menu Items</p>
+                  <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm mx-auto">
                     Try adjusting your search criteria or category filters.
                   </p>
                 </div>
@@ -976,25 +976,25 @@ const VendorDashboard = ({ user, onLogout }) => {
                   return (
                     <div
                       key={item.id}
-                      className={`bg-[#0D0F17] border rounded-2xl p-4 flex flex-col justify-between space-y-3.5 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-2xl ${
+                      className={`bg-[var(--card-bg)] border rounded-2xl p-4 flex flex-col justify-between space-y-3.5 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-2xl ${
                         isAvailable
-                          ? 'border-white/[0.08] hover:border-[#6366F1]/40'
+                          ? 'border-[var(--border-color)] hover:border-[var(--sb-primary)]/40'
                           : 'border-rose-500/30 opacity-70'
                       }`}
                     >
                       {/* Product Image Area (16:9 aspect ratio) */}
-                      <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-[#141724] border border-white/[0.06]">
+                      <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-[var(--bg-color)] border border-[var(--border-color)]">
                         {item.imageUrl ? (
                           <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                         ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 text-xs font-semibold space-y-1">
-                            <Utensils className="w-5 h-5 opacity-40 text-slate-400" />
-                            <span className="text-[10px] text-slate-500">Fallback Image</span>
+                          <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-muted)] text-xs font-semibold space-y-1">
+                            <Utensils className="w-5 h-5 opacity-40 text-[var(--text-muted)]" />
+                            <span className="text-[10px] text-[var(--text-muted)]">Fallback Image</span>
                           </div>
                         )}
 
                         {/* Category Badge Overlay */}
-                        <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-black/70 backdrop-blur-md text-slate-200 border border-white/10 rounded text-[9px] font-black uppercase tracking-wider">
+                        <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-black/70 backdrop-blur-md text-[var(--text-main)] border border-white/10 rounded text-[9px] font-black uppercase tracking-wider">
                           {item.category || 'GENERAL'}
                         </span>
 
@@ -1013,11 +1013,11 @@ const VendorDashboard = ({ user, onLogout }) => {
                       {/* Product Details & Price */}
                       <div className="space-y-1.5">
                         <div className="flex justify-between items-start">
-                          <h3 className="font-extrabold text-sm text-white line-clamp-1">{item.name}</h3>
+                          <h3 className="font-extrabold text-sm text-[var(--text-main)] line-clamp-1">{item.name}</h3>
                         </div>
 
                         {item.description && (
-                          <p className="text-[11px] text-slate-400 line-clamp-1 font-normal">
+                          <p className="text-[11px] text-[var(--text-muted)] line-clamp-1 font-normal">
                             {item.description}
                           </p>
                         )}
@@ -1032,16 +1032,16 @@ const VendorDashboard = ({ user, onLogout }) => {
                                 ? 'text-rose-400 font-extrabold'
                                 : isLowStock
                                 ? 'text-amber-400 font-extrabold'
-                                : 'text-slate-400'
+                                : 'text-[var(--text-muted)]'
                             }`}
                           >
-                            Stock: <strong className="text-white">{item.stock ?? 50}</strong>
+                            Stock: <strong className="text-[var(--text-main)]">{item.stock ?? 50}</strong>
                           </span>
                         </div>
                       </div>
 
                       {/* Availability Toggle & Actions */}
-                      <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between gap-2 text-xs">
+                      <div className="pt-2 border-t border-[var(--border-color)] flex items-center justify-between gap-2 text-xs">
                         {/* Availability Toggle Status */}
                         <button
                           onClick={() => handleToggleMenu(item.id, isAvailable)}
@@ -1060,7 +1060,7 @@ const VendorDashboard = ({ user, onLogout }) => {
                         <div className="flex items-center space-x-1.5">
                           <button
                             onClick={() => handleOpenEditModal(item)}
-                            className="px-3 py-1.5 bg-white/[0.06] hover:bg-white/[0.12] text-slate-200 border border-white/[0.08] rounded-xl font-bold text-[11px] transition-all cursor-pointer flex items-center space-x-1"
+                            className="px-3 py-1.5 bg-[var(--card-bg)] hover:bg-white/[0.12] text-[var(--text-main)] border border-[var(--border-color)] rounded-xl font-bold text-[11px] transition-all cursor-pointer flex items-center space-x-1"
                           >
                             <Edit className="w-3.5 h-3.5" />
                             <span>Edit</span>
@@ -1086,55 +1086,55 @@ const VendorDashboard = ({ user, onLogout }) => {
 
       {/* RECEIPT / ORDER DETAILS MODAL */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0D0F17] border border-white/[0.1] rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex justify-between items-center border-b border-white/[0.08] pb-3">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--card-bg)] border border-white/[0.1] rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
               <div>
-                <span className="text-[10px] text-slate-400 font-mono tracking-wider block">ORDER RECEIPT</span>
-                <h3 className="text-base font-extrabold text-white font-mono">
+                <span className="text-[10px] text-[var(--text-muted)] font-mono tracking-wider block">ORDER RECEIPT</span>
+                <h3 className="text-base font-extrabold text-[var(--text-main)] font-mono">
                   {selectedOrder.orderNumber || `#000${selectedOrder.id}`}
                 </h3>
               </div>
               <button
                 onClick={() => setSelectedOrder(null)}
-                className="p-1.5 rounded-xl bg-white/[0.06] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl bg-[var(--card-bg)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
-              <div className="bg-[#141724] p-3.5 rounded-xl border border-white/[0.06] space-y-1.5">
+              <div className="bg-[var(--bg-color)] p-3.5 rounded-xl border border-[var(--border-color)] space-y-1.5">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Customer:</span>
-                  <strong className="text-white">{selectedOrder.user?.name || 'Guest'}</strong>
+                  <span className="text-[var(--text-muted)]">Customer:</span>
+                  <strong className="text-[var(--text-main)]">{selectedOrder.user?.name || 'Guest'}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Table Placement:</span>
-                  <strong className="text-white">{selectedOrder.tableNumber || selectedOrder.tableId || 'Takeaway'}</strong>
+                  <span className="text-[var(--text-muted)]">Table Placement:</span>
+                  <strong className="text-[var(--text-main)]">{selectedOrder.tableNumber || selectedOrder.tableId || 'Takeaway'}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Payment Method:</span>
-                  <strong className="text-indigo-400 uppercase">{selectedOrder.paymentMethod || 'COD'}</strong>
+                  <span className="text-[var(--text-muted)]">Payment Method:</span>
+                  <strong className="text-orange-400 uppercase">{selectedOrder.paymentMethod || 'COD'}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Payment Status:</span>
+                  <span className="text-[var(--text-muted)]">Payment Status:</span>
                   <strong className="text-amber-400 font-bold uppercase">{selectedOrder.paymentStatus}</strong>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Order Status:</span>
+                  <span className="text-[var(--text-muted)]">Order Status:</span>
                   <strong className="text-emerald-400 font-bold uppercase">{selectedOrder.status}</strong>
                 </div>
               </div>
 
               {/* Itemized Breakdown */}
               <div className="space-y-2">
-                <span className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider block">Itemized Summary</span>
-                <div className="bg-[#141724] p-3.5 rounded-xl border border-white/[0.06] space-y-2">
+                <span className="text-[11px] font-extrabold text-[var(--text-muted)] uppercase tracking-wider block">Itemized Summary</span>
+                <div className="bg-[var(--bg-color)] p-3.5 rounded-xl border border-[var(--border-color)] space-y-2">
                   {selectedOrder.orderItems && selectedOrder.orderItems.length > 0 ? (
                     selectedOrder.orderItems.map((item, idx) => (
-                      <div key={idx} className="flex justify-between text-xs border-b border-white/[0.04] pb-1.5 last:border-none last:pb-0">
-                        <span className="text-white font-medium">
+                      <div key={idx} className="flex justify-between text-xs border-b border-[var(--border-color)] pb-1.5 last:border-none last:pb-0">
+                        <span className="text-[var(--text-main)] font-medium">
                           {item.quantity} × {item.name || item.menuItem?.name || 'Dish'}
                         </span>
                         <span className="text-emerald-400 font-mono">
@@ -1143,13 +1143,13 @@ const VendorDashboard = ({ user, onLogout }) => {
                       </div>
                     ))
                   ) : (
-                    <p className="text-slate-500 text-center py-2">Item details loaded.</p>
+                    <p className="text-[var(--text-muted)] text-center py-2">Item details loaded.</p>
                   )}
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-between items-center text-sm font-extrabold border-t border-white/[0.08]">
-                <span className="text-slate-400">Total Charged:</span>
+              <div className="pt-2 flex justify-between items-center text-sm font-extrabold border-t border-[var(--border-color)]">
+                <span className="text-[var(--text-muted)]">Total Charged:</span>
                 <span className="text-lg text-emerald-400 font-mono">Rs. {selectedOrder.total?.toFixed(2)}</span>
               </div>
             </div>
@@ -1157,7 +1157,7 @@ const VendorDashboard = ({ user, onLogout }) => {
             <div className="pt-2">
               <button
                 onClick={() => setSelectedOrder(null)}
-                className="w-full py-2.5 bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
+                className="w-full py-2.5 bg-[var(--sb-primary)] hover:bg-[var(--sb-primary-hover)] text-white rounded-xl font-bold text-xs shadow-md transition-all cursor-pointer"
               >
                 Close Receipt
               </button>
@@ -1168,15 +1168,15 @@ const VendorDashboard = ({ user, onLogout }) => {
 
       {/* Add / Edit Menu Item Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0D0F17] border border-white/[0.1] rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto custom-scrollbar">
-            <div className="flex justify-between items-center border-b border-white/[0.08] pb-4">
-              <h3 className="text-lg font-extrabold text-white font-display">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--card-bg)] border border-white/[0.1] rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 shadow-2xl animate-scale-up max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-4">
+              <h3 className="text-lg font-extrabold text-[var(--text-main)] font-display">
                 {showModal === 'edit' ? 'Edit Menu Item' : 'Add New Menu Item'}
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1.5 rounded-xl bg-white/[0.06] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                className="p-1.5 rounded-xl bg-[var(--card-bg)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1185,16 +1185,16 @@ const VendorDashboard = ({ user, onLogout }) => {
             <form onSubmit={handleSubmitMenuItem} className="space-y-4 text-xs">
               {/* IMAGE MANAGEMENT SECTION */}
               <div className="space-y-2">
-                <label className="block font-bold text-slate-400 uppercase">Dish Image</label>
-                <div className="p-4 bg-[#141724] rounded-2xl border border-white/[0.08] space-y-3">
+                <label className="block font-bold text-[var(--text-muted)] uppercase">Dish Image</label>
+                <div className="p-4 bg-[var(--bg-color)] rounded-2xl border border-[var(--border-color)] space-y-3">
                   {imagePreview ? (
-                    <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-white/[0.08] group">
+                    <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-[var(--border-color)] group">
                       <img src={imagePreview} alt="Dish Preview" className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
                         <button
                           type="button"
                           onClick={() => fileInputRef.current?.click()}
-                          className="px-3 py-1.5 bg-[#6366F1] text-white rounded-lg text-xs font-bold shadow-md cursor-pointer flex items-center space-x-1"
+                          className="px-3 py-1.5 bg-[var(--sb-primary)] text-white rounded-lg text-xs font-bold shadow-md cursor-pointer flex items-center space-x-1"
                         >
                           <Upload className="w-3.5 h-3.5" />
                           <span>Replace Image</span>
@@ -1211,12 +1211,12 @@ const VendorDashboard = ({ user, onLogout }) => {
                     </div>
                   ) : (
                     <div className="py-6 border-2 border-dashed border-white/[0.1] rounded-xl text-center space-y-2">
-                      <ImageIcon className="w-8 h-8 text-slate-500 mx-auto opacity-60" />
-                      <p className="text-xs text-slate-400 font-medium">No custom image selected (Using fallback image system)</p>
+                      <ImageIcon className="w-8 h-8 text-[var(--text-muted)] mx-auto opacity-60" />
+                      <p className="text-xs text-[var(--text-muted)] font-medium">No custom image selected (Using fallback image system)</p>
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-4 py-2 bg-[#6366F1] hover:bg-[#4F46E5] text-white rounded-xl font-bold text-xs cursor-pointer shadow-md inline-flex items-center space-x-1.5"
+                        className="px-4 py-2 bg-[var(--sb-primary)] hover:bg-[var(--sb-primary-hover)] text-white rounded-xl font-bold text-xs cursor-pointer shadow-md inline-flex items-center space-x-1.5"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>Upload Image</span>
@@ -1242,31 +1242,31 @@ const VendorDashboard = ({ user, onLogout }) => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-400 uppercase mb-1">Item Name *</label>
+                <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Item Name *</label>
                 <input
                   type="text"
                   required
                   value={modalData.name}
                   onChange={(e) => setModalData({ ...modalData, name: e.target.value })}
                   placeholder="e.g. Zinger Burger"
-                  className="w-full px-4 py-2.5 bg-[#141724] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-[#6366F1]"
+                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Category *</label>
+                  <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Category *</label>
                   <input
                     type="text"
                     required
                     value={modalData.category}
                     onChange={(e) => setModalData({ ...modalData, category: e.target.value })}
                     placeholder="e.g. Fast Food"
-                    className="w-full px-4 py-2.5 bg-[#141724] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-[#6366F1]"
+                    className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)]"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Price (Rs.) *</label>
+                  <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Price (Rs.) *</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1274,40 +1274,40 @@ const VendorDashboard = ({ user, onLogout }) => {
                     value={modalData.price}
                     onChange={(e) => setModalData({ ...modalData, price: e.target.value })}
                     placeholder="250.00"
-                    className="w-full px-4 py-2.5 bg-[#141724] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-[#6366F1] font-mono"
+                    className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)] font-mono"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Prep Time (mins)</label>
+                  <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Prep Time (mins)</label>
                   <input
                     type="number"
                     value={modalData.prepTime}
                     onChange={(e) => setModalData({ ...modalData, prepTime: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-[#141724] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-[#6366F1] font-mono"
+                    className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)] font-mono"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-400 uppercase mb-1">Stock</label>
+                  <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Stock</label>
                   <input
                     type="number"
                     value={modalData.stock}
                     onChange={(e) => setModalData({ ...modalData, stock: e.target.value })}
-                    className="w-full px-4 py-2.5 bg-[#141724] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-[#6366F1] font-mono"
+                    className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)] font-mono"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-400 uppercase mb-1">Description</label>
+                <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Description</label>
                 <textarea
                   rows={2}
                   value={modalData.description}
                   onChange={(e) => setModalData({ ...modalData, description: e.target.value })}
                   placeholder="Short product description..."
-                  className="w-full px-4 py-2.5 bg-[#141724] border border-white/[0.08] rounded-xl text-xs text-white focus:outline-none focus:border-[#6366F1]"
+                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)]"
                 />
               </div>
 
@@ -1317,25 +1317,25 @@ const VendorDashboard = ({ user, onLogout }) => {
                   id="availCheckVendor"
                   checked={modalData.isActive}
                   onChange={(e) => setModalData({ ...modalData, isActive: e.target.checked })}
-                  className="w-4 h-4 rounded text-[#6366F1] cursor-pointer"
+                  className="w-4 h-4 rounded text-[var(--sb-primary)] cursor-pointer"
                 />
-                <label htmlFor="availCheckVendor" className="font-bold text-white cursor-pointer">
+                <label htmlFor="availCheckVendor" className="font-bold text-[var(--text-main)] cursor-pointer">
                   Available for Customer Ordering
                 </label>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4 border-t border-white/[0.08]">
+              <div className="flex justify-end space-x-3 pt-4 border-t border-[var(--border-color)]">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-white/[0.06] text-slate-400 font-bold hover:text-white cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-[var(--card-bg)] text-[var(--text-muted)] font-bold hover:text-[var(--text-main)] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingMenuItem}
-                  className="px-5 py-2 rounded-xl bg-[#6366F1] hover:bg-[#4F46E5] text-white font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
+                  className="px-5 py-2 rounded-xl bg-[var(--sb-primary)] hover:bg-[var(--sb-primary-hover)] text-white font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5"
                 >
                   {savingMenuItem && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>{savingMenuItem ? 'Saving...' : 'Save Item'}</span>
@@ -1348,21 +1348,21 @@ const VendorDashboard = ({ user, onLogout }) => {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirmItem && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#0D0F17] border border-white/[0.1] rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up text-center">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--card-bg)] border border-white/[0.1] rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up text-center">
             <div className="w-12 h-12 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center mx-auto">
               <Trash2 className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-lg font-extrabold text-white font-display">Delete Menu Item?</h3>
-              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                Are you sure you want to delete <strong className="text-white">{deleteConfirmItem.name}</strong>? This action cannot be undone.
+              <h3 className="text-lg font-extrabold text-[var(--text-main)] font-display">Delete Menu Item?</h3>
+              <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                Are you sure you want to delete <strong className="text-[var(--text-main)]">{deleteConfirmItem.name}</strong>? This action cannot be undone.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/[0.08]">
+            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-[var(--border-color)]">
               <button
                 onClick={() => setDeleteConfirmItem(null)}
-                className="py-2.5 bg-white/[0.06] hover:bg-white/[0.12] text-slate-300 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                className="py-2.5 bg-[var(--card-bg)] hover:bg-white/[0.12] text-[var(--text-main)] font-bold text-xs rounded-xl transition-all cursor-pointer"
               >
                 Cancel
               </button>

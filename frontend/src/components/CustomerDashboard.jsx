@@ -62,6 +62,70 @@ export const parseTableDisplay = (tokenOrName) => {
   }
 };
 
+// Clean 6-box separate digit OTP input component
+export const OtpInputBoxes = ({ value, onChange, disabled }) => {
+  const digits = (value || '').padEnd(6, '').slice(0, 6).split('');
+  const inputRefs = React.useRef([]);
+
+  const handleChange = (e, index) => {
+    const val = e.target.value.replace(/[^0-9]/g, '');
+    if (!val) {
+      const newDigits = [...digits];
+      newDigits[index] = '';
+      onChange(newDigits.join('').trim());
+      return;
+    }
+    const char = val[val.length - 1];
+    const newDigits = [...digits];
+    newDigits[index] = char;
+    const result = newDigits.join('');
+    onChange(result);
+
+    if (index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (e, index) => {
+    if (e.key === 'Backspace' && !digits[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6);
+    if (pasted) {
+      onChange(pasted);
+      const nextFocus = Math.min(pasted.length, 5);
+      inputRefs.current[nextFocus]?.focus();
+    }
+  };
+
+  return (
+    <div className="flex gap-2 sm:gap-2.5 justify-center my-3" onPaste={handlePaste}>
+      {[0, 1, 2, 3, 4, 5].map((idx) => (
+        <input
+          key={idx}
+          ref={(el) => (inputRefs.current[idx] = el)}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={1}
+          disabled={disabled}
+          value={digits[idx] || ''}
+          onChange={(e) => handleChange(e, idx)}
+          onKeyDown={(e) => handleKeyDown(e, idx)}
+          className={`w-10 h-12 sm:w-11 sm:h-13 text-center text-lg sm:text-xl font-black font-mono rounded-xl border-2 transition-all focus:outline-none ${digits[idx]
+              ? 'border-[#E85D2A] bg-white text-[#E85D2A] shadow-sm'
+              : 'border-[#E7E5E4] bg-[#FAF9F7] text-[#171717] focus:border-[#E85D2A] focus:bg-white focus:ring-4 focus:ring-[#E85D2A]/15'
+            }`}
+        />
+      ))}
+    </div>
+  );
+};
+
 const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   const navigate = useNavigate();
 
@@ -109,14 +173,14 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   const [authName, setAuthName] = useState(() => {
     const saved = sessionStorage.getItem('user') || localStorage.getItem('customer_user');
     if (saved) {
-      try { return JSON.parse(saved).name || ''; } catch {}
+      try { return JSON.parse(saved).name || ''; } catch { }
     }
     return '';
   });
   const [authEmail, setAuthEmail] = useState(() => {
     const saved = sessionStorage.getItem('user') || localStorage.getItem('customer_user');
     if (saved) {
-      try { return JSON.parse(saved).email || ''; } catch {}
+      try { return JSON.parse(saved).email || ''; } catch { }
     }
     return '';
   });
@@ -153,7 +217,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
       try {
         const u = JSON.parse(saved);
         if (!u.isGuest) return u.name;
-      } catch {}
+      } catch { }
     }
     return '';
   });
@@ -178,7 +242,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
         if (cleanRouteToken.includes('%')) {
           try {
             cleanRouteToken = decodeURIComponent(cleanRouteToken);
-          } catch {}
+          } catch { }
         }
 
         const newTableDisplay = parseTableDisplay(cleanRouteToken);
@@ -323,8 +387,8 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
         const msg = hasOrders
           ? `Orders successfully shifted to ${newTableDisplay}! Kitchen and staff notified.`
           : hasCart
-          ? `Your cart has been moved to ${newTableDisplay}. Continue ordering!`
-          : `Session moved to ${newTableDisplay}. Welcome!`;
+            ? `Your cart has been moved to ${newTableDisplay}. Continue ordering!`
+            : `Session moved to ${newTableDisplay}. Welcome!`;
         setTransferSuccessMessage(msg);
         setTimeout(() => setTransferSuccessMessage(''), 6000);
         navigate('/customer', { replace: true });
@@ -561,7 +625,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   useEffect(() => {
     api.get('/tables/active').then(r => {
       if (r.data?.tables) setAvailableTables(r.data.tables);
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -670,7 +734,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
     const dismissedIds = JSON.parse(localStorage.getItem('customer_dismissed_failed') || '[]');
     for (const fo of failedOrders) {
       if (!dismissedIds.includes(fo.id)) dismissedIds.push(fo.id);
-      api.put(`/orders/${fo.id}/status`, { status: 'CANCELLED', note: 'Customer dismissed failed payment' }).catch(() => {});
+      api.put(`/orders/${fo.id}/status`, { status: 'CANCELLED', note: 'Customer dismissed failed payment' }).catch(() => { });
     }
     localStorage.setItem('customer_dismissed_failed', JSON.stringify(dismissedIds));
     setFailedOrders([]);
@@ -779,24 +843,24 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   const heroFoodImage = 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&auto=format&fit=crop&q=80';
 
   return (
-    <div className="min-h-screen bg-[#F7F8FC] text-[#171923] flex flex-col font-sans selection:bg-[#5B45F5]/20">
+    <div className="min-h-screen bg-[#FAF9F7] text-[#171717] flex flex-col font-sans selection:bg-[#F97316]/20">
       {/* ── Top Application Header ─────────────────────────────────────────────── */}
-      <header className="bg-white/90 backdrop-blur-md border-b border-[#E7E8EF] px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center z-30 sticky top-0 shadow-sm transition-all">
+      <header className="bg-white/90 backdrop-blur-md border-b border-[#E7E5E4] px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center z-30 sticky top-0 shadow-sm transition-all">
         <div className="flex items-center space-x-3 sm:space-x-4">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#5B45F5] to-[#7C3AED] flex items-center justify-center text-white text-lg font-black shadow-md shadow-[#5B45F5]/20">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#E85D2A] to-[#FB923C] flex items-center justify-center text-white text-lg font-black shadow-md shadow-[#E85D2A]/20">
               🍽️
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <h2 className="text-base sm:text-lg font-black tracking-tight text-[#171923] font-display">
-                  SWIPEBITE
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-[#171717] font-display">
+                  ZOVIKPOS
                 </h2>
-                <span className="text-[11px] bg-[#5B45F5]/10 text-[#5B45F5] border border-[#5B45F5]/20 px-2.5 py-0.5 rounded-full font-extrabold uppercase">
+                <span className="text-[11px] bg-[#E85D2A]/10 text-[#E85D2A] border border-[#E85D2A]/20 px-2.5 py-0.5 rounded-full font-extrabold uppercase">
                   {tableId}
                 </span>
               </div>
-              <div className="flex items-center space-x-2 text-[11px] text-[#6B7280] font-medium">
+              <div className="flex items-center space-x-2 text-[11px] text-[#78716C] font-medium">
                 <span>Scan Time: {scanTime}</span>
                 <span>•</span>
                 <span>Welcome, {authName || guestName || 'Customer'}</span>
@@ -808,26 +872,28 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
         <div className="flex items-center space-x-2 sm:space-x-3">
           <button
             onClick={() => setShowFAQ(true)}
-            className="p-2 sm:px-3 sm:py-2 text-xs font-bold text-[#6B7280] hover:text-[#5B45F5] hover:bg-[#5B45F5]/5 rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer"
+            className="p-2 sm:px-3 sm:py-2 text-xs font-bold text-[#78716C] hover:text-[#E85D2A] hover:bg-[#E85D2A]/5 rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer"
             title="Help & FAQ"
           >
-            <HelpCircle className="w-4 h-4 text-[#5B45F5]" />
+            <HelpCircle className="w-4 h-4 text-[#E85D2A]" />
             <span className="hidden sm:inline">Help</span>
           </button>
 
-          {/* Cart Header Button */}
-          <button
-            onClick={() => navigate('/customer/cart')}
-            className="relative px-4 py-2 sm:py-2.5 bg-[#5B45F5] hover:bg-[#4C38E8] active:scale-95 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-[#5B45F5]/25 flex items-center space-x-2 cursor-pointer"
-          >
-            <ShoppingBag className="w-4 h-4" />
-            <span className="hidden sm:inline">Cart</span>
-            {totalCartQuantity > 0 && (
-              <span className="bg-white text-[#5B45F5] w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] shadow-sm animate-scale-up">
-                {totalCartQuantity}
-              </span>
-            )}
-          </button>
+          {/* Cart Header Button (Only visible after login / OTP verification) */}
+          {isSessionVerified && (
+            <button
+              onClick={() => navigate('/customer/cart')}
+              className="relative px-4 py-2 sm:py-2.5 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-95 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-[#E85D2A]/25 flex items-center space-x-2 cursor-pointer"
+            >
+              <ShoppingBag className="w-4 h-4" />
+              <span className="hidden sm:inline">Cart</span>
+              {totalCartQuantity > 0 && (
+                <span className="bg-white text-[#E85D2A] w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] shadow-sm animate-scale-up">
+                  {totalCartQuantity}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </header>
 
@@ -838,7 +904,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
       {showTableSwitchModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 space-y-5 animate-scale-up">
-            <div className="w-12 h-12 bg-indigo-50 text-[#5B45F5] rounded-2xl flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 bg-orange-50 text-[#E85D2A] rounded-2xl flex items-center justify-center mx-auto">
               <RotateCcw className="w-6 h-6" />
             </div>
             <div className="text-center space-y-2">
@@ -846,30 +912,30 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                 {activeOrders.length > 0
                   ? `Deliver to ${pendingTableNumber}?`
                   : totalCartQuantity > 0
-                  ? `Take your cart to ${pendingTableNumber}?`
-                  : `Switch to ${pendingTableNumber}?`}
+                    ? `Take your cart to ${pendingTableNumber}?`
+                    : `Switch to ${pendingTableNumber}?`}
               </h3>
               <p className="text-xs text-gray-500 leading-relaxed">
                 {activeOrders.length > 0 ? (
                   <>
-                    You scanned <strong className="text-[#5B45F5] font-bold">{pendingTableNumber}</strong>, but you have{' '}
+                    You scanned <strong className="text-[#E85D2A] font-bold">{pendingTableNumber}</strong>, but you have{' '}
                     <strong className="text-emerald-700 font-bold">{activeOrders.length} active order(s)</strong>{' '}
                     placed from <strong className="text-gray-800">{currentTableSnapshot || tableId}</strong>.
                     {totalCartQuantity > 0 && (
                       <> Your cart with <strong className="text-amber-600 font-bold">{totalCartQuantity} item(s)</strong> will also move.</>
                     )}
-                    {' '}Do you want to transfer your current session &amp; active orders to <strong className="text-[#5B45F5] font-bold">{pendingTableNumber}</strong>, or start a fresh session?
+                    {' '}Do you want to transfer your current session &amp; active orders to <strong className="text-[#E85D2A] font-bold">{pendingTableNumber}</strong>, or start a fresh session?
                   </>
                 ) : totalCartQuantity > 0 ? (
                   <>
                     You have <strong className="text-amber-600 font-bold">{totalCartQuantity} item(s)</strong> in your cart from{' '}
                     <strong className="text-gray-800 font-bold">{currentTableSnapshot || tableId}</strong>. Transfer your session to{' '}
-                    <strong className="text-[#5B45F5] font-bold">{pendingTableNumber}</strong> to keep your items!
+                    <strong className="text-[#E85D2A] font-bold">{pendingTableNumber}</strong> to keep your items!
                   </>
                 ) : (
                   <>
                     Switch your active session from <strong className="text-gray-800 font-bold">{currentTableSnapshot || tableId}</strong> to{' '}
-                    <strong className="text-[#5B45F5] font-bold">{pendingTableNumber}</strong>.
+                    <strong className="text-[#E85D2A] font-bold">{pendingTableNumber}</strong>.
                   </>
                 )}
               </p>
@@ -887,8 +953,8 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                     {transferLoading
                       ? 'Transferring...'
                       : activeOrders.length > 0
-                      ? `Transfer Session & Orders to ${pendingTableNumber}`
-                      : `Move Cart to ${pendingTableNumber}`}
+                        ? `Transfer Session & Orders to ${pendingTableNumber}`
+                        : `Move Cart to ${pendingTableNumber}`}
                   </span>
                 </button>
               )}
@@ -896,7 +962,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
               {/* Primary Option 2: Start Fresh */}
               <button
                 onClick={handleConfirmTableSwitch}
-                className="w-full py-3 bg-[#5B45F5] hover:bg-[#4C38E8] text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center space-x-2"
+                className="w-full py-3 bg-[#E85D2A] hover:bg-[#D94E1B] text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center space-x-2"
               >
                 <span>{totalCartQuantity > 0 || activeOrders.length > 0 ? `Start Fresh Session at ${pendingTableNumber}` : `Switch to ${pendingTableNumber}`}</span>
               </button>
@@ -934,17 +1000,17 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
         {/* ── EMAIL + OTP VERIFICATION VIEW (Required before ordering) ────────── */}
         {!isSessionVerified ? (
-          <div className="max-w-md mx-auto my-8 bg-white border border-[#E7E8EF] rounded-[32px] p-6 sm:p-8 shadow-2xl text-center space-y-6 animate-fade-in">
-            <div className="w-16 h-16 bg-[#5B45F5]/10 text-[#5B45F5] rounded-3xl flex items-center justify-center mx-auto ring-8 ring-[#5B45F5]/5">
+          <div className="max-w-md mx-auto my-8 bg-white border border-[#E7E5E4] rounded-[32px] p-6 sm:p-8 shadow-2xl text-center space-y-6 animate-fade-in">
+            <div className="w-16 h-16 bg-[#E85D2A]/10 text-[#E85D2A] rounded-3xl flex items-center justify-center mx-auto ring-8 ring-[#E85D2A]/5">
               <ShieldCheck className="w-8 h-8" />
             </div>
 
             <div>
-              <span className="px-3 py-1 bg-[#5B45F5]/10 text-[#5B45F5] rounded-full text-[10px] font-black uppercase tracking-wider">
+              <span className="px-3 py-1 bg-[#E85D2A]/10 text-[#E85D2A] rounded-full text-[10px] font-black uppercase tracking-wider">
                 {tableId} • Smart Dining Session
               </span>
-              <h2 className="text-2xl font-black text-[#171923] mt-2">Welcome to {tableId}</h2>
-              <p className="text-xs text-[#6B7280] mt-1.5 leading-relaxed">
+              <h2 className="text-2xl font-black text-[#171717] mt-2">Welcome to {tableId}</h2>
+              <p className="text-xs text-[#78716C] mt-1.5 leading-relaxed">
                 Please verify your email address to unlock the menu and place your order.
               </p>
             </div>
@@ -966,21 +1032,21 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
             {!otpSent ? (
               <form onSubmit={handleSendOtp} className="space-y-4 text-left">
                 <div>
-                  <label className="text-[11px] font-bold text-[#171923] block mb-1">Your Full Name</label>
+                  <label className="text-[11px] font-bold text-[#171717] block mb-1">Your Full Name</label>
                   <div className="relative">
                     <input
                       type="text"
                       value={authName}
                       onChange={(e) => setAuthName(e.target.value)}
                       placeholder="e.g. John Doe"
-                      className="w-full bg-[#F7F8FC] border border-[#E7E8EF] rounded-xl px-4 py-3 text-xs text-[#171923] focus:outline-none focus:border-[#5B45F5] focus:bg-white transition-all"
+                      className="w-full bg-[#FAF9F7] border border-[#E7E5E4] rounded-xl px-4 py-3 text-xs text-[#171717] focus:outline-none focus:border-[#E85D2A] focus:bg-white transition-all"
                     />
-                    <User className="w-4 h-4 text-[#6B7280] absolute right-3.5 top-3.5" />
+                    <User className="w-4 h-4 text-[#78716C] absolute right-3.5 top-3.5" />
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-[#171923] block mb-1">Email Address (for Receipt & OTP)</label>
+                  <label className="text-[11px] font-bold text-[#171717] block mb-1">Email Address (for Receipt & OTP)</label>
                   <div className="relative">
                     <input
                       type="email"
@@ -988,16 +1054,16 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
                       placeholder="name@university.edu"
-                      className="w-full bg-[#F7F8FC] border border-[#E7E8EF] rounded-xl px-4 py-3 text-xs text-[#171923] focus:outline-none focus:border-[#5B45F5] focus:bg-white transition-all"
+                      className="w-full bg-[#FAF9F7] border border-[#E7E5E4] rounded-xl px-4 py-3 text-xs text-[#171717] focus:outline-none focus:border-[#E85D2A] focus:bg-white transition-all"
                     />
-                    <Mail className="w-4 h-4 text-[#6B7280] absolute right-3.5 top-3.5" />
+                    <Mail className="w-4 h-4 text-[#78716C] absolute right-3.5 top-3.5" />
                   </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={otpLoading}
-                  className="w-full py-3.5 bg-[#5B45F5] hover:bg-[#4C38E8] active:scale-[0.98] text-white font-black text-xs rounded-xl shadow-lg shadow-[#5B45F5]/25 transition-all cursor-pointer flex items-center justify-center space-x-2"
+                  className="w-full py-3.5 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-[0.98] text-white font-black text-xs rounded-xl shadow-lg shadow-[#E85D2A]/25 transition-all cursor-pointer flex items-center justify-center space-x-2"
                 >
                   {otpLoading ? (
                     <span>Sending Code...</span>
@@ -1013,27 +1079,20 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
               <form onSubmit={handleVerifyOtp} className="space-y-4 text-left">
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-[11px] font-bold text-[#171923]">Enter 6-Digit Code</label>
-                    <span className="text-[10px] text-[#6B7280] font-mono">{authEmail}</span>
+                    <label className="text-[11px] font-bold text-[#171717]">Enter 6-Digit Code</label>
+                    <span className="text-[10px] text-[#78716C] font-mono">{authEmail}</span>
                   </div>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      required
-                      value={otpCode}
-                      onChange={(e) => setOtpCode(e.target.value)}
-                      placeholder="••••••"
-                      className="w-full text-center tracking-[8px] text-lg font-black bg-[#F7F8FC] border border-[#E7E8EF] rounded-xl px-4 py-3 text-[#171923] focus:outline-none focus:border-[#5B45F5] focus:bg-white transition-all"
-                    />
-                    <KeyRound className="w-4 h-4 text-[#6B7280] absolute right-3.5 top-3.5" />
-                  </div>
+                  <OtpInputBoxes
+                    value={otpCode}
+                    onChange={setOtpCode}
+                    disabled={otpLoading}
+                  />
                 </div>
 
                 <button
                   type="submit"
-                  disabled={otpLoading}
-                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/25 transition-all cursor-pointer flex items-center justify-center space-x-2"
+                  disabled={otpLoading || otpCode.length < 6}
+                  className="w-full py-3.5 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-[0.98] text-white font-black text-xs rounded-xl shadow-lg shadow-[#E85D2A]/25 transition-all cursor-pointer flex items-center justify-center space-x-2"
                 >
                   {otpLoading ? <span>Verifying...</span> : <span>Verify &amp; Enter Menu</span>}
                 </button>
@@ -1042,7 +1101,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                   <button
                     type="button"
                     onClick={() => setOtpSent(false)}
-                    className="text-[#6B7280] hover:text-[#171923] cursor-pointer"
+                    className="text-[#78716C] hover:text-[#171717] cursor-pointer"
                   >
                     Change Email
                   </button>
@@ -1050,7 +1109,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                     type="button"
                     disabled={cooldown > 0 || otpLoading}
                     onClick={handleSendOtp}
-                    className="text-[#5B45F5] font-bold hover:underline disabled:opacity-50 cursor-pointer"
+                    className="text-[#E85D2A] font-bold hover:underline disabled:opacity-50 cursor-pointer"
                   >
                     {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Code'}
                   </button>
@@ -1068,22 +1127,36 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
               </div>
             )}
 
-            {/* Active Order Banner(s) - Single or Multi-Order Tracking */}
+            {/* Active Order Banner — ZovikPOS Premium */}
             {activeOrders.length === 1 && (
-              <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-emerald-500/10 border border-emerald-500/20 p-4 rounded-2xl flex flex-col space-y-3 text-xs shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="bg-white border border-[#E85D2A]/25 p-4 sm:p-5 rounded-3xl shadow-md shadow-[#E85D2A]/8 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-orange-50/60 via-transparent to-transparent pointer-events-none" />
+                <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center space-x-3">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                    <div>
-                      <strong className="text-emerald-800 font-bold block text-sm">
-                        Active Order {activeOrders[0].orderNumber || `#000${activeOrders[0].id}`} in Progress
-                      </strong>
-                      <span className="text-[#6B7280]">
-                        Status: <span className="font-bold text-emerald-700">{activeOrders[0].status}</span> • Delivering to: <strong className="text-emerald-900 font-bold bg-emerald-100/80 px-2 py-0.5 rounded">{activeOrders[0].tableNumber || tableId}</strong>
+                    <div className="w-9 h-9 rounded-2xl bg-[#E85D2A]/10 flex items-center justify-center shrink-0">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E85D2A] opacity-60"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#E85D2A]"></span>
                       </span>
                     </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <strong className="text-sm font-black text-[#171717]">
+                          Order {activeOrders[0].orderNumber || `#${activeOrders[0].id}`}
+                        </strong>
+                        <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#E85D2A]/10 text-[#E85D2A] border border-[#E85D2A]/20 uppercase tracking-wide">
+                          {activeOrders[0].status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[#78716C] mt-0.5">
+                        Delivering to:{' '}
+                        <strong className="text-[#171717] font-bold bg-[#FAF9F7] px-2 py-0.5 rounded-lg border border-[#E7E5E4]">
+                          {activeOrders[0].tableNumber || tableId}
+                        </strong>
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => {
                         if (deliveryChangeOrderId === activeOrders[0].id) {
@@ -1093,29 +1166,30 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                           setDeliveryChangeTarget(activeOrders[0].tableNumber || tableId);
                         }
                       }}
-                      className="px-3 py-1.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold rounded-xl text-xs transition-all shadow-xs cursor-pointer flex items-center space-x-1"
+                      className="px-3 py-2 bg-white hover:bg-[#FAF9F7] text-[#171717] border border-[#E7E5E4] font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1"
                     >
-                      <span>📍 Change Seat/Table</span>
+                      <span>📍</span>
+                      <span className="hidden sm:inline">Change Seat</span>
                     </button>
                     <button
                       onClick={() => navigate(`/customer/track/${activeOrders[0].trackingToken || activeOrders[0].id}`)}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition-all shadow-sm cursor-pointer"
+                      className="px-4 py-2 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-95 text-white font-extrabold rounded-xl text-xs transition-all shadow-md shadow-[#E85D2A]/20 cursor-pointer flex items-center gap-1.5"
                     >
-                      Track Live Order →
+                      <span>Track Order</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
-
                 {/* Inline Delivery Table Picker */}
                 {deliveryChangeOrderId === activeOrders[0].id && (
-                  <div className="p-3 bg-white/90 rounded-xl border border-emerald-200 flex flex-col sm:flex-row items-center gap-2.5 animate-fade-in">
-                    <span className="text-xs font-bold text-gray-700 whitespace-nowrap">
-                      Select new delivery seat/table:
+                  <div className="mt-3 p-3 bg-[#FAF9F7] rounded-2xl border border-[#E7E5E4] flex flex-col sm:flex-row items-start sm:items-center gap-2.5 animate-fade-in">
+                    <span className="text-xs font-bold text-[#171717] whitespace-nowrap shrink-0">
+                      New delivery table:
                     </span>
                     <select
                       value={deliveryChangeTarget}
                       onChange={(e) => setDeliveryChangeTarget(e.target.value)}
-                      className="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded-lg px-2.5 py-1.5 font-bold focus:outline-none focus:border-[#5B45F5]"
+                      className="w-full sm:w-auto bg-white border border-[#E7E5E4] text-[#171717] text-xs rounded-xl px-3 py-2 font-bold focus:outline-none focus:border-[#E85D2A] flex-1"
                     >
                       <option value="">Select Table...</option>
                       {availableTables.map(t => (
@@ -1124,34 +1198,36 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                         </option>
                       ))}
                     </select>
-                    <button
-                      disabled={deliveryChangeLoading || !deliveryChangeTarget}
-                      onClick={() => handleDeliveryTableChange(activeOrders[0].id, deliveryChangeTarget)}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer"
-                    >
-                      {deliveryChangeLoading ? 'Updating...' : 'Confirm Delivery Location Change'}
-                    </button>
-                    <button
-                      onClick={() => setDeliveryChangeOrderId(null)}
-                      className="text-xs text-gray-400 hover:text-gray-600 font-bold cursor-pointer"
-                    >
-                      Cancel
-                    </button>
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      <button
+                        disabled={deliveryChangeLoading || !deliveryChangeTarget}
+                        onClick={() => handleDeliveryTableChange(activeOrders[0].id, deliveryChangeTarget)}
+                        className="flex-1 sm:flex-none px-4 py-2 bg-[#E85D2A] hover:bg-[#D94E1B] disabled:opacity-50 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm cursor-pointer"
+                      >
+                        {deliveryChangeLoading ? 'Saving...' : 'Confirm'}
+                      </button>
+                      <button
+                        onClick={() => setDeliveryChangeOrderId(null)}
+                        className="px-3 py-2 text-xs text-[#78716C] hover:text-[#171717] font-bold bg-white border border-[#E7E5E4] rounded-xl cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
             {activeOrders.length > 1 && (
-              <div className="bg-gradient-to-br from-indigo-50/80 via-white to-purple-50/80 border border-indigo-100 p-4 sm:p-5 rounded-3xl space-y-3 shadow-sm">
+              <div className="bg-white border border-[#E85D2A]/25 p-4 sm:p-5 rounded-3xl space-y-3 shadow-md shadow-[#E85D2A]/8">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                    <span className="text-xs font-black uppercase tracking-wider text-indigo-950">
+                    <span className="text-xs font-black uppercase tracking-wider text-orange-950">
                       Active Orders in Progress ({activeOrders.length})
                     </span>
                   </div>
-                  <span className="text-[11px] font-bold text-[#5B45F5] bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-100">
+                  <span className="text-[11px] font-bold text-[#E85D2A] bg-orange-50 px-2.5 py-1 rounded-full border border-orange-100">
                     Live Kitchen Sync
                   </span>
                 </div>
@@ -1159,7 +1235,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                   {activeOrders.map((ord) => (
                     <div
                       key={ord.id}
-                      className="bg-white p-3.5 rounded-2xl border border-gray-100 flex flex-col space-y-2.5 shadow-xs hover:border-indigo-200 transition-all"
+                      className="bg-white p-3.5 rounded-2xl border border-gray-100 flex flex-col space-y-2.5 shadow-xs hover:border-orange-200 transition-all"
                     >
                       <div className="flex justify-between items-start">
                         <div className="space-y-1">
@@ -1172,12 +1248,12 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                             </span>
                           </div>
                           <p className="text-[11px] text-gray-500">
-                            Delivering to: <strong className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded font-bold">{ord.tableNumber || tableId}</strong> • {ord.orderItems?.length || 0} items
+                            Delivering to: <strong className="text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded font-bold">{ord.tableNumber || tableId}</strong> • {ord.orderItems?.length || 0} items
                           </p>
                         </div>
                         <button
                           onClick={() => navigate(`/customer/track/${ord.trackingToken || ord.id}`)}
-                          className="px-3 py-1.5 bg-[#5B45F5] hover:bg-[#4C38E8] text-white font-bold rounded-xl text-[11px] transition-all shadow-xs cursor-pointer shrink-0 ml-2"
+                          className="px-3 py-1.5 bg-[#E85D2A] hover:bg-[#D94E1B] text-white font-bold rounded-xl text-[11px] transition-all shadow-xs cursor-pointer shrink-0 ml-2"
                         >
                           Track →
                         </button>
@@ -1185,9 +1261,9 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
                       {/* Change Location Button / Picker for multi-orders */}
                       {deliveryChangeOrderId === ord.id ? (
-                        <div className="p-2.5 bg-indigo-50/70 rounded-xl border border-indigo-100 space-y-2 text-xs">
+                        <div className="p-2.5 bg-orange-50/70 rounded-xl border border-orange-100 space-y-2 text-xs">
                           <div className="flex items-center justify-between">
-                            <span className="font-bold text-indigo-950 text-[11px]">Select Delivery Table:</span>
+                            <span className="font-bold text-orange-950 text-[11px]">Select Delivery Table:</span>
                             <button onClick={() => setDeliveryChangeOrderId(null)} className="text-[10px] font-bold text-gray-400 hover:text-gray-600">✕ Close</button>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1218,7 +1294,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                             setDeliveryChangeOrderId(ord.id);
                             setDeliveryChangeTarget(ord.tableNumber || tableId);
                           }}
-                          className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline self-start flex items-center space-x-1"
+                          className="text-[11px] text-orange-600 hover:text-orange-800 font-bold hover:underline self-start flex items-center space-x-1"
                         >
                           <span>📍 Change delivery seat/table for this order</span>
                         </button>
@@ -1255,52 +1331,52 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
             )}
 
             {/* ── MENU VIEW ──────────────────────────────────────────────────────── */}
-            <div className="space-y-8">
-              {/* HERO BANNER — PREMIUM POLISH */}
-              <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#5B45F5] via-[#4F36E3] to-[#7C3AED] text-white p-6 sm:p-10 shadow-2xl shadow-[#5B45F5]/20 border border-white/10">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-purple-500/20 rounded-full blur-2xl pointer-events-none" />
+            <div className="space-y-6">
+              {/* HERO BANNER — PREMIUM */}
+              <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#E85D2A] via-[#F97316] to-[#EA580C] text-white p-5 sm:p-8 lg:p-10 shadow-xl shadow-[#E85D2A]/25 border border-white/10">
+                <div className="absolute top-0 right-0 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-orange-500/20 rounded-full blur-2xl pointer-events-none" />
 
-                <div className="grid md:grid-cols-12 items-center gap-6 sm:gap-8 relative z-10">
-                  <div className="md:col-span-7 space-y-4">
-                    <div className="inline-flex items-center space-x-2 px-3.5 py-1 bg-white/15 backdrop-blur-md rounded-full text-[11px] font-extrabold tracking-wider uppercase border border-white/20">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <div className="grid grid-cols-1 md:grid-cols-12 items-center gap-4 sm:gap-6 relative z-10">
+                  <div className="md:col-span-7 space-y-3 sm:space-y-4">
+                    <div className="inline-flex items-center space-x-2 px-3 py-1 bg-white/15 backdrop-blur-sm rounded-full text-[10px] sm:text-[11px] font-extrabold tracking-wider uppercase border border-white/20">
+                      <Sparkles className="w-3 h-3 text-amber-300" />
                       <span>Fresh &amp; Smart Canteen</span>
                     </div>
 
-                    <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-tight font-display">
-                      Good food.<br />Great mood. ✨
+                    <h1 className="text-2xl sm:text-3xl lg:text-5xl font-black tracking-tight leading-tight font-display">
+                      Good food.<br className="hidden sm:block" /> Great mood. ✨
                     </h1>
 
-                    <p className="text-xs sm:text-sm text-indigo-100 max-w-md leading-relaxed">
-                      Freshly prepared. Just for you.<br />
-                      <span className="text-indigo-200 font-medium text-[11px]">AI powered kitchen • Faster queue handling</span>
+                    <p className="text-[11px] sm:text-sm text-orange-100 max-w-md leading-relaxed">
+                      Freshly prepared. Just for you.{' '}
+                      <span className="text-orange-200 font-medium text-[10px] sm:text-[11px] block sm:inline mt-0.5 sm:mt-0">AI powered kitchen • Faster queue handling</span>
                     </p>
 
                     <button
                       onClick={() => navigate('/customer/cart')}
-                      className="inline-flex items-center space-x-2 px-6 py-3 bg-white hover:bg-slate-50 text-[#5B45F5] font-extrabold text-xs rounded-2xl shadow-xl hover:shadow-2xl active:scale-95 transition-all cursor-pointer"
+                      className="inline-flex items-center space-x-2 px-5 py-2.5 sm:px-6 sm:py-3 bg-white hover:bg-orange-50 text-[#E85D2A] font-extrabold text-xs rounded-2xl shadow-xl active:scale-95 transition-all cursor-pointer"
                     >
-                      <ShoppingBag className="w-4 h-4 text-[#5B45F5]" />
+                      <ShoppingBag className="w-4 h-4 text-[#E85D2A]" />
                       <span>View Cart {totalCartQuantity > 0 ? `(${totalCartQuantity})` : ''}</span>
-                      <ArrowRight className="w-4 h-4 text-[#5B45F5]" />
+                      <ArrowRight className="w-4 h-4 text-[#E85D2A]" />
                     </button>
                   </div>
 
-                  <div className="md:col-span-5 relative flex justify-center items-center">
-                    <div className="relative w-56 h-56 sm:w-64 sm:h-64 lg:w-72 lg:h-72 rounded-3xl overflow-hidden border-4 border-white/20 shadow-2xl transition-transform duration-500 hover:scale-105">
+                  <div className="md:col-span-5 relative flex justify-center items-center hidden sm:flex">
+                    <div className="relative w-48 h-48 sm:w-56 sm:h-56 lg:w-64 lg:h-64 rounded-3xl overflow-hidden border-4 border-white/20 shadow-2xl transition-transform duration-500 hover:scale-105">
                       <img
                         src={heroFoodImage}
                         alt="Featured Food"
                         className="w-full h-full object-cover"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
                     </div>
-                    <div className="absolute top-3 right-3 sm:right-6 bg-white/95 backdrop-blur-md text-[#171923] px-4 py-2.5 rounded-2xl shadow-2xl flex items-center space-x-2.5 border border-[#E7E8EF]">
-                      <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    <div className="absolute -top-2 right-0 sm:right-4 bg-white/95 backdrop-blur-md text-[#171717] px-3 py-2 rounded-2xl shadow-xl flex items-center space-x-2 border border-[#E7E5E4]">
+                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                       <div>
                         <strong className="text-xs font-black block leading-none">4.9 ⭐</strong>
-                        <span className="text-[9px] text-[#6B7280] font-bold">100+ reviews</span>
+                        <span className="text-[9px] text-[#78716C] font-bold">100+ reviews</span>
                       </div>
                     </div>
                   </div>
@@ -1315,9 +1391,9 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search for biryani, zinger burgers, chai, fries..."
-                    className="w-full bg-white border border-[#E7E8EF] rounded-2xl px-5 py-4 pl-12 text-xs text-[#171923] placeholder-[#6B7280] focus:outline-none focus:border-[#5B45F5] focus:ring-4 focus:ring-[#5B45F5]/10 transition-all shadow-sm font-medium"
+                    className="w-full bg-white border border-[#E7E5E4] rounded-2xl px-5 py-4 pl-12 text-xs text-[#171717] placeholder-[#78716C] focus:outline-none focus:border-[#E85D2A] focus:ring-4 focus:ring-[#E85D2A]/10 transition-all shadow-sm font-medium"
                   />
-                  <Search className="w-5 h-5 text-[#6B7280] absolute left-4 top-3.5" />
+                  <Search className="w-5 h-5 text-[#78716C] absolute left-4 top-3.5" />
                 </div>
 
                 {/* CATEGORY FILTERS */}
@@ -1326,11 +1402,10 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                     <button
                       key={cat}
                       onClick={() => setCategory(cat)}
-                      className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold whitespace-nowrap transition-all duration-200 cursor-pointer ${
-                        category === cat
-                          ? 'bg-[#5B45F5] text-white shadow-md shadow-[#5B45F5]/25 border border-[#5B45F5]'
-                          : 'bg-white border border-[#E7E8EF] text-[#6B7280] hover:border-[#5B45F5]/40 hover:text-[#5B45F5]'
-                      }`}
+                      className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold whitespace-nowrap transition-all duration-200 cursor-pointer ${category === cat
+                          ? 'bg-[#E85D2A] text-white shadow-md shadow-[#E85D2A]/25 border border-[#E85D2A]'
+                          : 'bg-white border border-[#E7E5E4] text-[#78716C] hover:border-[#E85D2A]/40 hover:text-[#E85D2A]'
+                        }`}
                     >
                       {cat}
                     </button>
@@ -1338,14 +1413,15 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                 </div>
               </div>
 
-              {/* FOOD PRODUCTS GRID — Grouped by variant */}
+              {/* FOOD PRODUCTS GRID — Premium mobile-first layout */}
               {filteredGrouped.length === 0 ? (
-                <div className="py-16 text-center text-xs font-bold text-[#6B7280] bg-white border border-[#E7E8EF] rounded-[24px] p-8 shadow-sm">
-                  <p className="text-sm font-extrabold text-[#171923]">No dishes found</p>
-                  <p className="text-xs text-[#6B7280] mt-1">Try searching for another dish or selecting a different category.</p>
+                <div className="py-16 text-center text-xs font-bold text-[#78716C] bg-white border border-[#E7E5E4] rounded-3xl p-8 shadow-xs">
+                  <div className="text-3xl mb-3">🍽️</div>
+                  <p className="text-sm font-extrabold text-[#171717]">No dishes found</p>
+                  <p className="text-xs text-[#78716C] mt-1">Try a different category or search term.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5 items-start">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 items-start">
                   {filteredGrouped.map(({ groupKey, variants }) => {
                     const isExpanded = expandedGroup === groupKey;
                     const selectedVariant = pendingVariant[groupKey] || variants[0];
@@ -1356,14 +1432,18 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                     return (
                       <div
                         key={groupKey}
-                        className={`bg-white rounded-[24px] overflow-hidden flex flex-col transition-all duration-300 hover:shadow-xl group ${
+                        className={`bg-white overflow-hidden flex transition-all duration-300 group ${
                           isExpanded
-                            ? 'border-2 border-[#5B45F5]/50 shadow-xl ring-4 ring-[#5B45F5]/5'
-                            : 'border border-[#E7E8EF] hover:border-[#5B45F5]/30'
+                            ? 'flex-col rounded-2xl border-2 border-[#E85D2A] shadow-xl ring-4 ring-[#E85D2A]/8'
+                            : 'sm:flex-col flex-row rounded-2xl sm:rounded-2xl border border-[#E7E5E4] hover:border-[#E85D2A]/40 hover:shadow-lg'
                         } ${isOutOfStock ? 'opacity-60' : ''}`}
                       >
-                        {/* Food Image */}
-                        <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100 shrink-0">
+                        {/* Food Image — horizontal on mobile (left), vertical on tablet+ */}
+                        <div className={`relative overflow-hidden bg-[#FAF9F7] shrink-0 ${
+                          isExpanded
+                            ? 'aspect-[16/9] w-full'
+                            : 'sm:aspect-[4/3] sm:w-full w-28 h-full sm:h-auto rounded-l-2xl sm:rounded-t-2xl sm:rounded-bl-none'
+                        }`}>
                           <img
                             src={getItemImage(selectedVariant)}
                             alt={groupKey}
@@ -1373,52 +1453,52 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                             }}
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                           />
-                          <div className="absolute top-2.5 left-2.5 bg-black/60 backdrop-blur-md text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+                          {/* Gradient overlay */}
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-70" />
+                          {/* Category Badge */}
+                          <div className="absolute top-2 left-2 bg-black/55 backdrop-blur-sm text-white text-[9px] sm:text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wide">
                             {selectedVariant.category}
                           </div>
+                          {/* Prep time */}
                           {selectedVariant.prepTime && (
-                            <div className="absolute top-2.5 right-2.5 bg-white/90 backdrop-blur-md text-[#171923] text-[10px] font-bold px-2 py-1 rounded-full flex items-center space-x-1 shadow-sm">
-                              <Clock className="w-3 h-3 text-[#5B45F5]" />
+                            <div className="absolute top-2 right-2 bg-white/95 text-[#171717] text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
+                              <Clock className="w-2.5 h-2.5 text-[#E85D2A]" />
                               <span>{selectedVariant.prepTime}m</span>
                             </div>
                           )}
+                          {/* In cart badge */}
                           {inCartQty > 0 && !isExpanded && (
-                            <div className="absolute bottom-2 right-2.5 bg-[#5B45F5] text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-md">
+                            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-2 bg-[#E85D2A] text-white text-[9px] font-black px-2 py-0.5 rounded-full shadow-md whitespace-nowrap">
                               {inCartQty} in cart
                             </div>
                           )}
                         </div>
 
                         {/* Card Body */}
-                        <div className="p-3 sm:p-4 flex-1 flex flex-col space-y-2">
-                          <div>
-                            <h3 className="font-extrabold text-xs sm:text-sm text-[#171923] group-hover:text-[#5B45F5] transition-colors line-clamp-2 leading-tight flex items-center gap-1.5 flex-wrap">
-                              <span>{groupKey}</span>
-                              {variants.length === 1 && selectedVariant.unit && (
-                                <span className="px-1.5 py-0.5 bg-[#5B45F5]/10 text-[#5B45F5] rounded text-[10px] font-bold">
-                                  {selectedVariant.unit}
-                                </span>
-                              )}
+                        <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between min-w-0">
+                          <div className="flex-1">
+                            <h3 className="font-extrabold text-sm text-[#171717] group-hover:text-[#E85D2A] transition-colors leading-snug line-clamp-2">
+                              {groupKey}
                             </h3>
                             {!isExpanded && (
-                              <p className="text-[10px] text-[#6B7280] mt-0.5 line-clamp-1 leading-relaxed">
-                                {selectedVariant.description || 'Freshly prepared.'}
+                              <p className="text-[10px] sm:text-[11px] text-[#78716C] mt-1 line-clamp-2 leading-relaxed">
+                                {selectedVariant.description || 'Freshly prepared to order.'}
                               </p>
                             )}
                           </div>
 
                           {/* ── COLLAPSED STATE ── */}
                           {!isExpanded && (
-                            <div className="flex items-center justify-between pt-2 mt-auto border-t border-[#F3F4F8]">
+                            <div className="flex items-end justify-between mt-3 pt-2.5 border-t border-[#F5F5F4]">
                               <div>
-                                <span className="text-[9px] text-[#6B7280] block font-semibold">
-                                  {variants.length > 1 ? variants.map((v) => v.unit).join(' / ') : selectedVariant.unit}
+                                <span className="text-[10px] text-[#78716C] font-semibold block">
+                                  {variants.length > 1 ? variants.map((v) => v.unit).join(' / ') : (selectedVariant.unit || '')}
                                 </span>
-                                <span className="text-sm font-black text-[#5B45F5]">
+                                <span className="text-base font-black text-[#E85D2A] leading-none">
                                   Rs. {selectedVariant.price}
                                 </span>
                                 {variants.length > 1 && (
-                                  <span className="text-[9px] text-amber-600 font-bold block">{variants.length} portion sizes ▾</span>
+                                  <span className="text-[9px] text-[#E85D2A] font-bold block mt-0.5">{variants.length} sizes ▾</span>
                                 )}
                               </div>
                               {isOutOfStock ? (
@@ -1426,10 +1506,10 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                               ) : (
                                 <button
                                   onClick={() => setExpandedGroup(groupKey)}
-                                  className="px-3 py-2 bg-[#5B45F5] hover:bg-[#4C38E8] active:scale-95 text-white font-bold text-[11px] rounded-xl transition-all shadow-md shadow-[#5B45F5]/15 cursor-pointer flex items-center space-x-1"
+                                  className="w-9 h-9 sm:w-auto sm:h-auto sm:px-3.5 sm:py-2 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-90 text-white font-extrabold text-[11px] rounded-xl transition-all shadow-md shadow-[#E85D2A]/20 cursor-pointer flex items-center justify-center gap-1"
                                 >
-                                  <CartIcon className="w-3 h-3" />
-                                  <span>{inCartQty > 0 ? 'More' : 'Add'}</span>
+                                  <CartIcon className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">{inCartQty > 0 ? 'More' : 'Add'}</span>
                                 </button>
                               )}
                             </div>
@@ -1437,24 +1517,24 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
                           {/* ── EXPANDED STATE ── */}
                           {isExpanded && (
-                            <div className="space-y-3 pt-1">
+                            <div className="space-y-3 mt-3 pt-3 border-t border-[#F5F5F4]">
                               {/* Variant selector */}
                               {variants.length > 1 && (
                                 <div>
-                                  <p className="text-[9px] font-extrabold text-[#6B7280] uppercase tracking-wider mb-1.5">Choose Portion</p>
-                                  <div className="flex flex-col gap-1.5">
+                                  <p className="text-[10px] font-extrabold text-[#78716C] uppercase tracking-wider mb-2">Choose Portion</p>
+                                  <div className="grid grid-cols-2 gap-1.5">
                                     {variants.map((v) => (
                                       <button
                                         key={v.id}
                                         onClick={() => setPendingVariant((prev) => ({ ...prev, [groupKey]: v }))}
-                                        className={`w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border-2 flex justify-between items-center ${
+                                        className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border-2 flex flex-col items-start gap-0.5 ${
                                           selectedVariant.id === v.id
-                                            ? 'bg-[#5B45F5] text-white border-[#5B45F5] shadow-md'
-                                            : 'bg-[#F7F8FC] text-[#171923] border-[#E7E8EF] hover:border-[#5B45F5]/50'
+                                            ? 'bg-[#E85D2A] text-white border-[#E85D2A] shadow-md'
+                                            : 'bg-[#FAF9F7] text-[#171717] border-[#E7E5E4] hover:border-[#E85D2A]/50'
                                         }`}
                                       >
-                                        <span>{v.unit}</span>
-                                        <span className={selectedVariant.id === v.id ? 'text-indigo-200 font-black' : 'text-[#5B45F5] font-black'}>
+                                        <span className="text-[11px]">{v.unit}</span>
+                                        <span className={`text-[11px] font-black ${selectedVariant.id === v.id ? 'text-orange-200' : 'text-[#E85D2A]'}`}>
                                           Rs. {v.price}
                                         </span>
                                       </button>
@@ -1463,40 +1543,40 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                                 </div>
                               )}
 
-                              {/* Single variant: show unit + price pill */}
+                              {/* Single variant price pill */}
                               {variants.length === 1 && (
-                                <div className="flex justify-between items-center px-3 py-2 bg-[#F7F8FC] rounded-xl border border-[#E7E8EF]">
-                                  <span className="text-xs font-bold text-[#171923]">{selectedVariant.unit}</span>
-                                  <span className="text-sm font-black text-[#5B45F5]">Rs. {selectedVariant.price}</span>
+                                <div className="flex justify-between items-center px-3 py-2 bg-[#FAF9F7] rounded-xl border border-[#E7E5E4]">
+                                  <span className="text-xs font-bold text-[#171717]">{selectedVariant.unit}</span>
+                                  <span className="text-sm font-black text-[#E85D2A]">Rs. {selectedVariant.price}</span>
                                 </div>
                               )}
 
                               {/* Quantity stepper */}
                               <div>
-                                <p className="text-[9px] font-extrabold text-[#6B7280] uppercase tracking-wider mb-1.5">Quantity</p>
-                                <div className="flex items-center space-x-3 bg-[#F7F8FC] border border-[#E7E8EF] rounded-xl px-3 py-2 w-fit">
+                                <p className="text-[10px] font-extrabold text-[#78716C] uppercase tracking-wider mb-2">Quantity</p>
+                                <div className="flex items-center bg-[#FAF9F7] border border-[#E7E5E4] rounded-xl p-1.5 gap-3 w-fit">
                                   <button
                                     onClick={() => setPendingQty((prev) => ({ ...prev, [groupKey]: Math.max(1, (prev[groupKey] || 1) - 1) }))}
-                                    className="w-7 h-7 bg-white border border-[#E7E8EF] text-[#5B45F5] font-black rounded-lg flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 hover:border-rose-200 transition-all cursor-pointer shadow-sm"
+                                    className="w-8 h-8 bg-white border border-[#E7E5E4] text-[#E85D2A] font-black rounded-lg flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all cursor-pointer shadow-xs"
                                   >
-                                    <Minus className="w-3 h-3" />
+                                    <Minus className="w-3.5 h-3.5" />
                                   </button>
-                                  <span className="text-sm font-black text-[#171923] w-5 text-center">{qty}</span>
+                                  <span className="text-sm font-black text-[#171717] w-6 text-center">{qty}</span>
                                   <button
                                     onClick={() => setPendingQty((prev) => ({ ...prev, [groupKey]: (prev[groupKey] || 1) + 1 }))}
-                                    className="w-7 h-7 bg-[#5B45F5] text-white font-black rounded-lg flex items-center justify-center hover:bg-[#4C38E8] transition-all cursor-pointer shadow-sm"
+                                    className="w-8 h-8 bg-[#E85D2A] text-white font-black rounded-lg flex items-center justify-center hover:bg-[#D94E1B] transition-all cursor-pointer shadow-xs"
                                   >
-                                    <Plus className="w-3 h-3" />
+                                    <Plus className="w-3.5 h-3.5" />
                                   </button>
                                 </div>
                               </div>
 
                               {/* Price preview */}
-                              <div className="flex items-center justify-between pt-1 border-t border-[#F3F4F8]">
-                                <span className="text-[10px] text-[#6B7280] font-semibold">
+                              <div className="flex items-center justify-between py-2 border-t border-[#F5F5F4]">
+                                <span className="text-[11px] text-[#78716C] font-semibold">
                                   {qty} × Rs. {selectedVariant.price}
                                 </span>
-                                <span className="text-base font-black text-[#5B45F5]">
+                                <span className="text-base font-black text-[#E85D2A]">
                                   Rs. {(selectedVariant.price * qty).toFixed(0)}
                                 </span>
                               </div>
@@ -1505,13 +1585,13 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => setExpandedGroup(null)}
-                                  className="flex-1 py-2.5 bg-[#F7F8FC] hover:bg-[#E7E8EF] text-[#6B7280] font-bold text-xs rounded-xl transition-all cursor-pointer border border-[#E7E8EF]"
+                                  className="flex-1 py-2.5 bg-[#FAF9F7] hover:bg-[#E7E5E4] text-[#78716C] font-bold text-xs rounded-xl transition-all cursor-pointer border border-[#E7E5E4]"
                                 >
                                   Cancel
                                 </button>
                                 <button
                                   onClick={() => handleAddWithVariantAndQty(selectedVariant, qty, groupKey)}
-                                  className="flex-[2] py-2.5 bg-[#5B45F5] hover:bg-[#4C38E8] active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#5B45F5]/25 cursor-pointer flex items-center justify-center space-x-1.5"
+                                  className="flex-[2] py-2.5 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#E85D2A]/20 cursor-pointer flex items-center justify-center gap-1.5"
                                 >
                                   <CartIcon className="w-3.5 h-3.5" />
                                   <span>Add to Cart</span>
@@ -1533,9 +1613,9 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
       {/* STICKY CART FOOTER BAR (Preserved Sticky Behavior & Badge) */}
       {totalCartQuantity > 0 && isSessionVerified && (
         <div className="sticky bottom-4 z-40 max-w-2xl mx-auto px-4 w-full animate-slide-up">
-          <div className="bg-[#171923] text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-slate-700/50 backdrop-blur-lg">
+          <div className="bg-[#171717] text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-slate-700/50 backdrop-blur-lg">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#5B45F5] text-white flex items-center justify-center font-black text-sm shadow-md">
+              <div className="w-10 h-10 rounded-2xl bg-[#E85D2A] text-white flex items-center justify-center font-black text-sm shadow-md">
                 {totalCartQuantity}
               </div>
               <div>
@@ -1546,7 +1626,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
             <button
               onClick={() => navigate('/customer/cart')}
-              className="px-5 py-2.5 bg-[#5B45F5] hover:bg-[#4C38E8] text-white font-extrabold text-xs rounded-2xl shadow-lg transition-all flex items-center space-x-2 cursor-pointer"
+              className="px-5 py-2.5 bg-[#E85D2A] hover:bg-[#D94E1B] text-white font-extrabold text-xs rounded-2xl shadow-lg transition-all flex items-center space-x-2 cursor-pointer"
             >
               <span>View Cart &amp; Checkout</span>
               <ArrowRight className="w-4 h-4" />

@@ -135,7 +135,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
           </button>
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Export PDF</span>
@@ -148,7 +148,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
         <button
           onClick={() => setActiveTab('STOCK')}
           className={`px-4 py-2 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-            activeTab === 'STOCK' ? 'bg-indigo-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+            activeTab === 'STOCK' ? 'bg-orange-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
           }`}
         >
           Stock Inventory Catalog
@@ -156,7 +156,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
         <button
           onClick={() => setActiveTab('LOGS')}
           className={`px-4 py-2 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-            activeTab === 'LOGS' ? 'bg-indigo-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+            activeTab === 'LOGS' ? 'bg-orange-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
           }`}
         >
           Stock Adjustment Logs ({logs.length})
@@ -174,7 +174,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search inventory item name..."
-                className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+                className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
               />
             </div>
 
@@ -182,7 +182,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-indigo-500 cursor-pointer"
+                className="w-full px-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer"
               >
                 <option value="ALL">All Stock Statuses</option>
                 <option value="NORMAL">Normal Stock</option>
@@ -212,7 +212,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                   {filteredStock.map((item) => (
                     <tr key={item.id} className="hover:bg-[var(--bg-color)]/40 transition-colors">
                       <td className="p-4 font-bold text-[var(--text-main)]">{item.name}</td>
-                      <td className="p-4 font-mono font-extrabold text-indigo-400">{item.stockLevel}</td>
+                      <td className="p-4 font-mono font-extrabold text-orange-400">{item.stockLevel}</td>
                       <td className="p-4 font-mono text-[var(--text-muted)]">{item.minThreshold}</td>
                       <td className="p-4 uppercase font-bold text-[var(--text-muted)]">{item.unit}</td>
                       <td className="p-4">
@@ -223,7 +223,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                               : item.status === 'LOW'
                               ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                               : item.status === 'OVERSTOCK'
-                              ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                              ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
                               : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
                           }`}
                         >
@@ -236,7 +236,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                       <td className="p-4 text-right">
                         <button
                           onClick={() => setSelectedItem(item)}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center space-x-1 ml-auto cursor-pointer shadow-md"
+                          className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all flex items-center space-x-1 ml-auto cursor-pointer shadow-md"
                         >
                           <Plus className="w-3.5 h-3.5" />
                           <span>Restock Item</span>
@@ -275,7 +275,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                         {log.quantityChange > 0 ? `+${log.quantityChange}` : log.quantityChange}
                       </span>
                     </td>
-                    <td className="p-4 font-mono font-extrabold text-indigo-400">{log.quantityAfter}</td>
+                    <td className="p-4 font-mono font-extrabold text-orange-400">{log.quantityAfter}</td>
                     <td className="p-4 text-[var(--text-main)] font-semibold">{log.reason || 'Deduction / Restock'}</td>
                     <td className="p-4 text-[11px] text-[var(--text-muted)]">{new Date(log.createdAt).toLocaleString()}</td>
                   </tr>
@@ -305,7 +305,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
 
             <form onSubmit={handleRestock} className="space-y-4 text-xs">
               <div className="p-3 bg-[var(--bg-color)] rounded-xl border border-[var(--border-color)] flex justify-between">
-                <span>Current Stock: <strong className="text-indigo-400 font-mono">{selectedItem.stockLevel} {selectedItem.unit}</strong></span>
+                <span>Current Stock: <strong className="text-orange-400 font-mono">{selectedItem.stockLevel} {selectedItem.unit}</strong></span>
                 <span>Minimum: <strong className="text-[var(--text-muted)] font-mono">{selectedItem.minThreshold} {selectedItem.unit}</strong></span>
               </div>
 
@@ -318,7 +318,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                   value={restockQty}
                   onChange={(e) => setRestockQty(e.target.value)}
                   placeholder="e.g. 50"
-                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500 font-mono"
+                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
                 />
               </div>
 
@@ -328,7 +328,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                   type="text"
                   value={restockReason}
                   onChange={(e) => setRestockReason(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                 />
               </div>
 
@@ -342,7 +342,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all shadow-md cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold transition-all shadow-md cursor-pointer"
                 >
                   Confirm Restock
                 </button>

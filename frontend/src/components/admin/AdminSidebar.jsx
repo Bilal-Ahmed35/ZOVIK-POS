@@ -93,13 +93,13 @@ const AdminSidebar = ({ activeTab, onSelectTab, collapsed, onToggleCollapse, isM
         {/* Sidebar Header Brand */}
         <div className="h-16 px-4 flex items-center justify-between border-b border-[var(--border-color)] shrink-0">
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex items-center justify-center text-white shrink-0 shadow-lg shadow-indigo-600/30">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 to-orange-500 flex items-center justify-center text-white shrink-0 shadow-lg shadow-orange-600/30">
               <Sparkles className="w-5 h-5" />
             </div>
             {!collapsed && (
               <div className="animate-fade-in truncate">
-                <h1 className="font-extrabold text-sm text-[var(--text-main)] tracking-tight font-display">SWIPEBITE</h1>
-                <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider">Enterprise POS</p>
+                <h1 className="font-extrabold text-sm text-[var(--text-main)] tracking-tight font-display">ZOVIKPOS</h1>
+                <p className="text-[10px] text-orange-400 font-bold uppercase tracking-wider">Enterprise POS</p>
               </div>
             )}
           </div>
@@ -137,12 +137,12 @@ const AdminSidebar = ({ activeTab, onSelectTab, collapsed, onToggleCollapse, isM
                     }}
                     className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer relative group ${
                       isActive
-                        ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 border border-indigo-400/20'
+                        ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20 border border-orange-400/20'
                         : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-color)]/60'
                     }`}
                     title={collapsed ? item.label : undefined}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-indigo-400 group-hover:text-indigo-300'}`} />
+                    <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-orange-400 group-hover:text-orange-300'}`} />
                     {!collapsed && <span className="truncate">{item.label}</span>}
 
                     {/* Tooltip for Collapsed Sidebar */}

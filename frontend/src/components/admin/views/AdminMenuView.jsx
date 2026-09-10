@@ -376,7 +376,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
 
         <button
           onClick={() => handleOpenAdd()}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
+          className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Menu Item</span>
@@ -392,7 +392,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
               key={cat}
               onClick={() => setSelectedCategory(cat)}
               className={`px-3 py-1.5 rounded-lg text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
-                selectedCategory === cat ? 'bg-indigo-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                selectedCategory === cat ? 'bg-orange-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               {cat}
@@ -408,7 +408,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search menu item name..."
-            className="w-full pl-10 pr-4 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full pl-10 pr-4 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-colors"
           />
         </div>
       </div>
@@ -450,7 +450,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                 </span>
 
                 <div className="absolute top-2 right-2 flex items-center space-x-1">
-                  <span className="px-2 py-0.5 bg-indigo-600/90 backdrop-blur-md text-white rounded text-[9px] font-extrabold shadow-sm">
+                  <span className="px-2 py-0.5 bg-orange-600/90 backdrop-blur-md text-white rounded text-[9px] font-extrabold shadow-sm">
                     {variants.length} {variants.length > 1 ? 'Variants' : 'Portion'}
                   </span>
                   <button
@@ -476,7 +476,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                 {/* Prep Time & Stock of primary */}
                 <div className="flex justify-between items-center text-xs text-[var(--text-muted)] border-t border-[var(--border-color)] pt-2">
                   <span className="flex items-center space-x-1">
-                    <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                    <Clock className="w-3.5 h-3.5 text-orange-400" />
                     <span>~{primaryItem.prepTime || 10} mins</span>
                   </span>
                   <span className="flex items-center space-x-1">
@@ -493,7 +493,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                     </p>
                     <button
                       onClick={() => handleOpenAdd(groupKey)}
-                      className="text-[10px] font-extrabold text-indigo-400 hover:text-indigo-300 flex items-center space-x-0.5 cursor-pointer"
+                      className="text-[10px] font-extrabold text-orange-400 hover:text-orange-300 flex items-center space-x-0.5 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       <span>Add Portion</span>
@@ -513,7 +513,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                       >
                         {/* Left: Unit + Price */}
                         <div className="flex items-center space-x-2.5 flex-1 min-w-0">
-                          <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-md text-[10px] font-bold shrink-0">
+                          <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-md text-[10px] font-bold shrink-0">
                             {v.unit || '1 No.'}
                           </span>
                           <span className="text-sm font-mono font-extrabold text-emerald-400 shrink-0">
@@ -538,7 +538,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                           </button>
                           <button
                             onClick={() => handleOpenEditSingleVariant(v)}
-                            className="p-1.5 text-indigo-400 hover:bg-indigo-500/10 rounded-lg transition-all cursor-pointer"
+                            className="p-1.5 text-orange-400 hover:bg-orange-500/10 rounded-lg transition-all cursor-pointer"
                             title="Edit Variant"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
@@ -568,7 +568,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
             {/* Modal Header — Fixed Top */}
             <div className="flex justify-between items-center p-4 sm:p-5 border-b border-[var(--border-color)] shrink-0 bg-[var(--card-bg)] z-10">
               <div className="flex items-center space-x-2.5">
-                <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl border border-indigo-500/20 shrink-0">
+                <div className="p-2 bg-orange-500/10 text-orange-400 rounded-xl border border-orange-500/20 shrink-0">
                   <Layers className="w-5 h-5" />
                 </div>
                 <div>
@@ -596,14 +596,14 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                     <button
                       type="button"
                       onClick={() => { setImageMode('url'); setPendingBase64(null); }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${imageMode === 'url' ? 'bg-indigo-600 text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${imageMode === 'url' ? 'bg-orange-600 text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                     >
                       Image URL
                     </button>
                     <button
                       type="button"
                       onClick={() => { setImageMode('file'); }}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${imageMode === 'file' ? 'bg-indigo-600 text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${imageMode === 'file' ? 'bg-orange-600 text-white shadow-sm' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                     >
                       Upload File
                     </button>
@@ -634,7 +634,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                         value={formData.imageUrl || ''}
                         onChange={(e) => handleUrlChange(e.target.value)}
                         placeholder="https://images.unsplash.com/photo-..."
-                        className="w-full px-3 py-1.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500 font-mono"
+                        className="w-full px-3 py-1.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
                       />
                     </div>
                   ) : (
@@ -644,7 +644,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-[11px] cursor-pointer shadow-sm inline-flex items-center space-x-1"
+                        className="px-3 py-1 bg-orange-600 hover:bg-orange-500 text-white rounded-lg font-bold text-[11px] cursor-pointer shadow-sm inline-flex items-center space-x-1"
                       >
                         <Upload className="w-3 h-3" />
                         <span>Browse...</span>
@@ -679,7 +679,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="e.g. Chicken Biryani"
-                    className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
@@ -695,7 +695,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                         setFormData({ ...formData, category: e.target.value });
                       }
                     }}
-                    className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500 cursor-pointer font-bold"
+                    className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer font-bold"
                   >
                     {['Lunch', 'Breakfast', 'Fast Food', 'Refreshment', 'Burgers', 'Pizza', 'Beverages'].map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -712,7 +712,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                         setFormData((prev) => ({ ...prev, category: e.target.value }));
                       }}
                       placeholder="Enter custom category"
-                      className="w-full mt-1.5 px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+                      className="w-full mt-1.5 px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                     />
                   )}
                 </div>
@@ -731,7 +731,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                       customGroup: val === 'CUSTOM' ? prev.customGroup : ''
                     }));
                   }}
-                  className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500 cursor-pointer font-bold"
+                  className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer font-bold"
                 >
                   <option value="">Same as Item Name ({formData.name || 'Default'})</option>
                   {existingGroups.map((grp) => (
@@ -747,7 +747,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                     value={formData.customGroup}
                     onChange={(e) => setFormData(prev => ({ ...prev, customGroup: e.target.value }))}
                     placeholder="Enter brand new group name (e.g. Paratha Special)"
-                    className="w-full mt-1.5 px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+                    className="w-full mt-1.5 px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                   />
                 )}
               </div>
@@ -762,7 +762,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                   <button
                     type="button"
                     onClick={handleAddVariantRow}
-                    className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-400 border border-indigo-500/30 rounded-lg font-bold text-[11px] transition-all cursor-pointer flex items-center space-x-1"
+                    className="px-2.5 py-1 bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 border border-orange-500/30 rounded-lg font-bold text-[11px] transition-all cursor-pointer flex items-center space-x-1"
                   >
                     <Plus className="w-3 h-3" />
                     <span>Add Portion</span>
@@ -777,7 +777,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                         <select
                           value={v.unit}
                           onChange={(e) => handleVariantChange(idx, 'unit', e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-indigo-500 cursor-pointer"
+                          className="w-full px-2.5 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer"
                         >
                           {PRESET_UNITS.map((u) => (
                             <option key={u} value={u}>{u}</option>
@@ -791,7 +791,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                             value={v.customUnit}
                             onChange={(e) => handleVariantChange(idx, 'customUnit', e.target.value)}
                             placeholder="e.g. 300 gm or Quarter"
-                            className="w-full mt-1 px-2.5 py-1 bg-[var(--bg-color)] border border-[var(--border-color)] rounded text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+                            className="w-full mt-1 px-2.5 py-1 bg-[var(--bg-color)] border border-[var(--border-color)] rounded text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                           />
                         )}
                       </div>
@@ -805,7 +805,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                           value={v.price}
                           onChange={(e) => handleVariantChange(idx, 'price', e.target.value)}
                           placeholder="Price (Rs.)"
-                          className="w-full px-2.5 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded text-xs font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+                          className="w-full px-2.5 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded text-xs font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                         />
                       </div>
 
@@ -833,7 +833,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                     type="number"
                     value={formData.prepTime}
                     onChange={(e) => setFormData({ ...formData, prepTime: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500 font-mono"
+                    className="w-full px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
                   />
                 </div>
                 <div>
@@ -842,7 +842,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                     type="number"
                     value={formData.stock}
                     onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
-                    className="w-full px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500 font-mono"
+                    className="w-full px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
                   />
                 </div>
               </div>
@@ -855,7 +855,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Short product description..."
-                  className="w-full px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                 />
               </div>
 
@@ -866,7 +866,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                   id="availCheckAdmin"
                   checked={formData.isAvailable}
                   onChange={(e) => setFormData({ ...formData, isAvailable: e.target.checked })}
-                  className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
+                  className="w-4 h-4 rounded text-orange-600 cursor-pointer"
                 />
                 <label htmlFor="availCheckAdmin" className="font-bold text-[var(--text-main)] cursor-pointer text-xs">
                   Available for Customer Ordering
@@ -885,7 +885,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5 text-xs"
+                  className="px-5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all shadow-md cursor-pointer flex items-center space-x-1.5 text-xs"
                 >
                   {saving && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   <span>{saving ? 'Saving...' : `Save ${formData.variants.length > 1 ? `${formData.variants.length} Portions` : 'Item'}`}</span>

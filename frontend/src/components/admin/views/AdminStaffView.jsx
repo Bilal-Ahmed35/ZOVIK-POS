@@ -23,8 +23,8 @@ const ROLE_CONFIG = {
     label: 'System Administrator',
     shortLabel: 'Admin',
     icon: Crown,
-    badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800',
-    iconColor: 'text-indigo-600 dark:text-indigo-400',
+    badgeBg: 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-orange-300 dark:border-indigo-800',
+    iconColor: 'text-orange-600 dark:text-orange-400',
   },
   VENDOR: {
     label: 'Cashier / Vendor',
@@ -50,7 +50,7 @@ const ROLES_LIST = [
 
 const StaffAvatar = ({ name, role }) => {
   const roleColorMap = {
-    ADMIN: 'bg-gradient-to-tr from-indigo-600 to-violet-500 text-white shadow-indigo-500/20',
+    ADMIN: 'bg-gradient-to-tr from-orange-600 to-orange-500 text-white shadow-orange-500/20',
     VENDOR: 'bg-gradient-to-tr from-emerald-600 to-teal-500 text-white shadow-emerald-500/20',
     KITCHEN: 'bg-gradient-to-tr from-amber-600 to-orange-500 text-white shadow-amber-500/20',
   };
@@ -180,7 +180,7 @@ const AdminStaffView = ({ showToast }) => {
         <div>
           <h2 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50">
-              <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              <Users className="w-5 h-5 text-orange-600 dark:text-orange-400" />
             </div>
             <span>Staff Accounts &amp; Authorization</span>
           </h2>
@@ -191,14 +191,14 @@ const AdminStaffView = ({ showToast }) => {
         <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
           <button
             onClick={fetchStaff}
-            className="p-2.5 rounded-xl bg-[var(--bg-color)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-indigo-400 transition-all cursor-pointer shadow-sm"
+            className="p-2.5 rounded-xl bg-[var(--bg-color)] border border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-orange-400 transition-all cursor-pointer shadow-sm"
             title="Refresh list"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-orange-600' : ''}`} />
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md hover:shadow-indigo-500/25 flex items-center gap-2 cursor-pointer"
+            className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-semibold transition-all shadow-md hover:shadow-orange-500/25 flex items-center gap-2 cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
             <span>Add New Staff</span>
@@ -215,7 +215,7 @@ const AdminStaffView = ({ showToast }) => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by name, email, or role..."
-            className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)]/70 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all shadow-sm"
+            className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)]/70 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 transition-all shadow-sm"
           />
         </div>
         <div className="text-xs font-medium text-[var(--text-muted)] px-1">
@@ -227,7 +227,7 @@ const AdminStaffView = ({ showToast }) => {
       <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-sm overflow-hidden">
         {loading ? (
           <div className="py-20 text-center flex flex-col items-center justify-center space-y-3">
-            <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
+            <RefreshCw className="w-8 h-8 text-orange-500 animate-spin" />
             <p className="text-xs font-semibold text-[var(--text-muted)]">Loading staff directory...</p>
           </div>
         ) : filteredStaff.length === 0 ? (
@@ -267,7 +267,7 @@ const AdminStaffView = ({ showToast }) => {
                         <div className="flex items-center gap-3">
                           <StaffAvatar name={staff.name} role={staff.role} />
                           <div>
-                            <div className="font-bold text-[var(--text-main)] text-xs group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                            <div className="font-bold text-[var(--text-main)] text-xs group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
                               {staff.name}
                             </div>
                             <div className="text-[11px] text-[var(--text-muted)] sm:hidden font-normal">
@@ -326,7 +326,7 @@ const AdminStaffView = ({ showToast }) => {
                             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold text-violet-700 dark:text-violet-300 bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/50 dark:hover:bg-violet-900/50 border border-violet-200 dark:border-violet-800 transition-all cursor-pointer whitespace-nowrap"
                             title="Change Role"
                           >
-                            <ShieldCheck className="w-3.5 h-3.5 text-violet-500" />
+                            <ShieldCheck className="w-3.5 h-3.5 text-orange-500" />
                             <span>Role</span>
                           </button>
 
@@ -387,7 +387,7 @@ const AdminStaffView = ({ showToast }) => {
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
             <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-4">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-orange-600 dark:text-orange-400">
                   <UserPlus className="w-5 h-5" />
                 </div>
                 <div>
@@ -412,7 +412,7 @@ const AdminStaffView = ({ showToast }) => {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g. John Doe"
-                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 transition-all"
                 />
               </div>
 
@@ -424,7 +424,7 @@ const AdminStaffView = ({ showToast }) => {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   placeholder="staff@zovikpos.com"
-                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 transition-all"
                 />
               </div>
 
@@ -437,7 +437,7 @@ const AdminStaffView = ({ showToast }) => {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Minimum 6 characters"
-                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)]/60 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/10 transition-all"
                 />
               </div>
 
@@ -453,7 +453,7 @@ const AdminStaffView = ({ showToast }) => {
                         key={r.value}
                         className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                           isSelected
-                            ? 'border-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-1 ring-indigo-500'
+                            ? 'border-orange-500 bg-indigo-50/50 dark:bg-indigo-950/40 ring-1 ring-orange-500'
                             : 'border-[var(--border-color)] bg-[var(--bg-color)] hover:border-indigo-300'
                         }`}
                       >
@@ -487,7 +487,7 @@ const AdminStaffView = ({ showToast }) => {
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white font-semibold transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-60 text-white font-semibold transition-all shadow-md flex items-center gap-2 cursor-pointer"
                 >
                   {actionLoading ? (
                     <>
@@ -593,12 +593,12 @@ const AdminStaffView = ({ showToast }) => {
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
             <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-4">
               <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-950/60 border border-violet-200 dark:border-violet-800 text-violet-600 dark:text-violet-400">
+                <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-950/60 border border-violet-200 dark:border-violet-800 text-orange-600 dark:text-orange-400">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-[var(--text-main)]">Change Authorization Role</h3>
-                  <p className="text-[11px] text-[var(--text-muted)]">{selectedStaff.name} · current: <span className="font-bold text-violet-600 dark:text-violet-400">{selectedStaff.role}</span></p>
+                  <p className="text-[11px] text-[var(--text-muted)]">{selectedStaff.name} · current: <span className="font-bold text-orange-600 dark:text-orange-400">{selectedStaff.role}</span></p>
                 </div>
               </div>
               <button
@@ -622,7 +622,7 @@ const AdminStaffView = ({ showToast }) => {
                         key={r.value}
                         className={`flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
                           isSelected
-                            ? 'border-violet-500 bg-violet-50/50 dark:bg-violet-950/40 ring-1 ring-violet-500'
+                            ? 'border-orange-500 bg-violet-50/50 dark:bg-violet-950/40 ring-1 ring-orange-500'
                             : 'border-[var(--border-color)] bg-[var(--bg-color)] hover:border-violet-300'
                         }`}
                       >
@@ -632,7 +632,7 @@ const AdminStaffView = ({ showToast }) => {
                           value={r.value}
                           checked={isSelected}
                           onChange={() => setNewRole(r.value)}
-                          className="accent-violet-600"
+                          className="accent-orange-600"
                         />
                         <Icon className={`w-4 h-4 ${cfg.iconColor}`} />
                         <div className="flex-1">
@@ -656,7 +656,7 @@ const AdminStaffView = ({ showToast }) => {
                 <button
                   type="submit"
                   disabled={actionLoading || newRole === selectedStaff.role}
-                  className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-semibold transition-all shadow-md flex items-center gap-2 cursor-pointer"
                 >
                   {actionLoading ? (
                     <>

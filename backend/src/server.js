@@ -53,7 +53,7 @@ app.use('/api/eta', etaRoutes);
 app.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
-    service: 'SwipeBite POS Backend API',
+    service: 'ZovikPOS Backend API',
     timestamp: new Date().toISOString(),
   });
 });

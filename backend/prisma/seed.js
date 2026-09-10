@@ -32,7 +32,7 @@ async function main() {
   // 1. Create Default Branch
   const branch = await prisma.branch.create({
     data: {
-      name: 'SwipeBite Main Campus Canteen',
+      name: 'ZovikPOS Main Campus Canteen',
       address: 'University Campus Plaza, Block A',
       phone: '+92 300 1234567',
       isActive: true,

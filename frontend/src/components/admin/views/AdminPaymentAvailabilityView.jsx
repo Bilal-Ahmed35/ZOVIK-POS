@@ -102,7 +102,7 @@ const AdminPaymentAvailabilityView = ({ showToast }) => {
         <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-6 rounded-2xl shadow-xl space-y-6">
           <div className="flex justify-between items-start">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-2xl bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center">
                 <CreditCard className="w-6 h-6" />
               </div>
               <div>
@@ -129,7 +129,7 @@ const AdminPaymentAvailabilityView = ({ showToast }) => {
               className={`px-4 py-2 rounded-xl font-extrabold text-xs transition-all cursor-pointer shadow-md ${
                 settings.onlineEnabled
                   ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  : 'bg-orange-600 hover:bg-orange-500 text-white'
               }`}
             >
               {settings.onlineEnabled ? 'Close Online Payment' : 'Open Online Payment'}

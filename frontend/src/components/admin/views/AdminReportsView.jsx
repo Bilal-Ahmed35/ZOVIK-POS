@@ -110,7 +110,7 @@ const AdminReportsView = ({ stats, orders = [], inventory = [], period, setPerio
           </button>
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Export PDF</span>
@@ -131,7 +131,7 @@ const AdminReportsView = ({ stats, orders = [], inventory = [], period, setPerio
               key={type.id}
               onClick={() => setReportType(type.id)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                reportType === type.id ? 'bg-indigo-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                reportType === type.id ? 'bg-orange-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               {type.label}
@@ -151,7 +151,7 @@ const AdminReportsView = ({ stats, orders = [], inventory = [], period, setPerio
               key={item.id}
               onClick={() => setPeriod(item.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                period === item.id ? 'bg-indigo-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                period === item.id ? 'bg-orange-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               {item.label}
@@ -172,7 +172,7 @@ const AdminReportsView = ({ stats, orders = [], inventory = [], period, setPerio
         </div>
         <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-4 rounded-xl">
           <span className="text-[10px] text-[var(--text-muted)] font-black uppercase">Average Order Value</span>
-          <strong className="text-xl font-mono font-extrabold text-indigo-400 block mt-1">
+          <strong className="text-xl font-mono font-extrabold text-orange-400 block mt-1">
             Rs. {orders.length > 0 ? (metrics.totalRevenue / orders.length).toFixed(2) : '0.00'}
           </strong>
         </div>
@@ -200,12 +200,12 @@ const AdminReportsView = ({ stats, orders = [], inventory = [], period, setPerio
             <tbody className="divide-y divide-[var(--border-color)]">
               {orders.map((o) => (
                 <tr key={o.id} className="hover:bg-[var(--bg-color)]/40 transition-colors">
-                  <td className="p-4 font-mono font-extrabold text-indigo-400">{o.orderNumber}</td>
+                  <td className="p-4 font-mono font-extrabold text-orange-400">{o.orderNumber}</td>
                   <td className="p-4 font-bold text-[var(--text-main)]">{o.user?.name || o.user?.email || 'Guest'}</td>
                   <td className="p-4">{o.tableNumber || (o.tableId ? `Table ${o.tableId}` : 'Takeaway')}</td>
                   <td className="p-4 font-mono font-extrabold text-emerald-400">Rs. {o.total?.toFixed(2)}</td>
                   <td className="p-4">{o.paymentMethod}</td>
-                  <td className="p-4 font-bold text-indigo-400">{o.status}</td>
+                  <td className="p-4 font-bold text-orange-400">{o.status}</td>
                   <td className="p-4 text-[11px] text-[var(--text-muted)]">{new Date(o.createdAt).toLocaleString()}</td>
                 </tr>
               ))}

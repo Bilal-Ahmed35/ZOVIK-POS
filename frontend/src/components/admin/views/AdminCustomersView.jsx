@@ -119,7 +119,7 @@ const AdminCustomersView = ({ showToast }) => {
           </button>
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Export PDF</span>
@@ -135,7 +135,7 @@ const AdminCustomersView = ({ showToast }) => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search by customer email or name..."
-          className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500"
+          className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
         />
       </div>
 
@@ -181,7 +181,7 @@ const AdminCustomersView = ({ showToast }) => {
                     <td className="p-4 text-right">
                       <button
                         onClick={() => setSelectedCustomer(c)}
-                        className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl font-bold transition-all flex items-center space-x-1 ml-auto cursor-pointer"
+                        className="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 rounded-xl font-bold transition-all flex items-center space-x-1 ml-auto cursor-pointer"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>View Details</span>
@@ -220,7 +220,7 @@ const AdminCustomersView = ({ showToast }) => {
               </div>
               <div className="p-4 bg-[var(--bg-color)] rounded-2xl border border-[var(--border-color)]">
                 <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase block">Paid Orders</span>
-                <strong className="text-lg font-extrabold text-indigo-400 block">{selectedCustomer.paidOrdersCount}</strong>
+                <strong className="text-lg font-extrabold text-orange-400 block">{selectedCustomer.paidOrdersCount}</strong>
               </div>
               <div className="p-4 bg-[var(--bg-color)] rounded-2xl border border-[var(--border-color)]">
                 <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase block">Total Spending</span>
@@ -235,7 +235,7 @@ const AdminCustomersView = ({ showToast }) => {
                 {selectedCustomer.recentOrders?.map((order) => (
                   <div key={order.id} className="p-3 flex justify-between items-center">
                     <div>
-                      <strong className="text-indigo-400 font-mono block">{order.orderNumber}</strong>
+                      <strong className="text-orange-400 font-mono block">{order.orderNumber}</strong>
                       <span className="text-[10px] text-[var(--text-muted)]">{new Date(order.createdAt).toLocaleString()}</span>
                     </div>
                     <div className="text-right">

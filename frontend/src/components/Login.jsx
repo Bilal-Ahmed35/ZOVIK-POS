@@ -52,8 +52,8 @@ const Login = ({ onLoginSuccess }) => {
       title: 'Administrator',
       email: 'admin@pos.com',
       desc: 'View sales analytics, low stock logs & AI predictions',
-      color: 'from-violet-500/10 to-indigo-500/10 border-violet-500/15 hover:border-violet-500/60 hover:shadow-[0_0_20px_rgba(139,92,246,0.1)]',
-      icon: <Shield className="w-5 h-5 text-violet-400" />,
+      color: 'from-orange-500/10 to-amber-500/10 border-orange-500/15 hover:border-orange-500/60 hover:shadow-[0_0_20px_rgba(249,115,22,0.1)]',
+      icon: <Shield className="w-5 h-5 text-orange-400" />,
       badge: 'Admin Access'
     },
     {
@@ -61,8 +61,8 @@ const Login = ({ onLoginSuccess }) => {
       title: 'Vendor / Cashier',
       email: 'vendor@pos.com',
       desc: 'Verify mobile transaction IDs & manage order delivery',
-      color: 'from-emerald-500/10 to-teal-500/10 border-emerald-500/15 hover:border-emerald-500/60 hover:shadow-[0_0_20px_rgba(16,185,129,0.1)]',
-      icon: <UserCheck className="w-5 h-5 text-emerald-400" />,
+      color: 'from-orange-500/10 to-amber-500/10 border-orange-500/15 hover:border-amber-500/60 hover:shadow-[0_0_20px_rgba(245,158,11,0.1)]',
+      icon: <UserCheck className="w-5 h-5 text-amber-400" />,
       badge: 'POS Terminal'
     },
     {
@@ -79,28 +79,28 @@ const Login = ({ onLoginSuccess }) => {
       title: 'Customer Ordering',
       email: 'customer@pos.com',
       desc: 'Self-ordering menu, digital checkout & order tracking',
-      color: 'from-blue-500/10 to-cyan-500/10 border-blue-500/15 hover:border-blue-500/60 hover:shadow-[0_0_20px_rgba(59,130,246,0.1)]',
-      icon: <User className="w-5 h-5 text-blue-400" />,
+      color: 'from-orange-500/10 to-orange-400/10 border-orange-500/15 hover:border-orange-500/60 hover:shadow-[0_0_20px_rgba(249,115,22,0.1)]',
+      icon: <User className="w-5 h-5 text-orange-400" />,
       badge: 'Digital Menu'
     },
   ];
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center px-6 bg-[#07080b] text-gray-250 relative overflow-hidden select-none">
-      {/* Decorative neon backlights */}
-      <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-indigo-650/5 rounded-full blur-[130px] pointer-events-none" />
-      <div className="bottom-1/4 right-1/4 w-[400px] h-[400px] bg-emerald-650/5 rounded-full blur-[130px] pointer-events-none" />
+    <div className="min-h-screen flex flex-col justify-center items-center px-6 bg-[#0A0A0A] text-gray-250 relative overflow-hidden select-none">
+      {/* Decorative warm backlights */}
+      <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-orange-600/5 rounded-full blur-[130px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-amber-600/5 rounded-full blur-[130px] pointer-events-none" />
 
       <div className="w-full max-w-6xl grid lg:grid-cols-12 gap-10 items-center relative z-10 py-8 animate-fade-in">
         {/* Left column: Quick Demo Access */}
         <div className="lg:col-span-7 flex flex-col space-y-7">
           <div>
-            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full text-[10px] font-extrabold tracking-wider uppercase">
-              ✨ SwipeBite AI POS Suite
+            <div className="inline-flex items-center space-x-2 px-3 py-1 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-full text-[10px] font-extrabold tracking-wider uppercase">
+              🍽️ ZovikPOS AI POS Suite
             </div>
             <h1 className="font-display text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-white mt-4 leading-[1.1]">
               Canteen Management <br />
-              <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-emerald-400 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-orange-400 via-amber-300 to-orange-500 bg-clip-text text-transparent">
                 Redefined by AI
               </span>
             </h1>
@@ -121,14 +121,14 @@ const Login = ({ onLoginSuccess }) => {
                   <div className="p-2 bg-gray-950/60 rounded-xl border border-white/5">
                     {account.icon}
                   </div>
-                  <span className="px-2 py-0.5 bg-white/5 text-gray-400 group-hover:text-white group-hover:bg-indigo-600/25 border border-white/5 rounded text-[8px] font-bold uppercase tracking-wider transition-all">
+                  <span className="px-2 py-0.5 bg-white/5 text-gray-400 group-hover:text-white group-hover:bg-orange-600/25 border border-white/5 rounded text-[8px] font-bold uppercase tracking-wider transition-all">
                     {account.badge}
                   </span>
                 </div>
                 <h3 className="font-display font-bold text-white mt-4 text-base tracking-tight">{account.title}</h3>
                 <p className="text-xs text-gray-500 mt-1.5 leading-relaxed group-hover:text-gray-400 transition-colors">{account.desc}</p>
                 <div className="flex items-center justify-between w-full mt-4 border-t border-white/[0.04] pt-3">
-                  <span className="text-[10px] text-gray-500 font-mono group-hover:text-indigo-400 transition-colors">{account.email}</span>
+                  <span className="text-[10px] text-gray-500 font-mono group-hover:text-orange-400 transition-colors">{account.email}</span>
                   <span className="text-[9px] text-gray-600 font-semibold uppercase tracking-wider group-hover:translate-x-1 transition-transform">→</span>
                 </div>
               </button>
@@ -140,11 +140,11 @@ const Login = ({ onLoginSuccess }) => {
         <div className="lg:col-span-5">
           <div className="bg-white/[0.02] backdrop-blur-xl border border-white/[0.05] p-8 rounded-[32px] shadow-2xl relative shadow-black/40">
             {/* Top edge linear light */}
-            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/20 to-transparent" />
+            <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-orange-500/20 to-transparent" />
 
             <div className="flex items-center space-x-3 mb-6">
-              <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
-                <LogIn className="w-4 h-4 text-indigo-400" />
+              <div className="p-2 bg-orange-500/10 border border-orange-500/20 rounded-xl">
+                <LogIn className="w-4 h-4 text-orange-400" />
               </div>
               <h2 className="font-display text-lg font-bold text-white tracking-tight">Credentials Log In</h2>
             </div>
@@ -170,7 +170,7 @@ const Login = ({ onLoginSuccess }) => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="name@pos.com"
-                    className="w-full bg-gray-950/40 border border-white/5 rounded-xl pl-9 pr-4 py-3 text-xs focus:outline-none focus:border-indigo-500/50 focus:bg-gray-950 transition-all text-white placeholder-gray-700"
+                    className="w-full bg-gray-950/40 border border-white/5 rounded-xl pl-9 pr-4 py-3 text-xs focus:outline-none focus:border-orange-500/50 focus:bg-gray-950 transition-all text-white placeholder-gray-700"
                   />
                 </div>
               </div>
@@ -189,7 +189,7 @@ const Login = ({ onLoginSuccess }) => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-gray-950/40 border border-white/5 rounded-xl pl-9 pr-4 py-3 text-xs focus:outline-none focus:border-indigo-500/50 focus:bg-gray-950 transition-all text-white placeholder-gray-700"
+                    className="w-full bg-gray-950/40 border border-white/5 rounded-xl pl-9 pr-4 py-3 text-xs focus:outline-none focus:border-orange-500/50 focus:bg-gray-950 transition-all text-white placeholder-gray-700"
                   />
                 </div>
               </div>
@@ -197,7 +197,7 @@ const Login = ({ onLoginSuccess }) => {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/10 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none mt-2"
+                className="w-full py-3.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-orange-600/10 cursor-pointer transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none mt-2"
               >
                 {loading ? 'Authenticating...' : 'Sign In'}
               </button>

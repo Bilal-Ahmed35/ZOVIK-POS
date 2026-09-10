@@ -19,7 +19,7 @@ const AdminAIInsightsView = ({ stats, alerts = [], alertsContext, onRecalculateA
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-6 rounded-2xl shadow-xl">
         <div>
           <div className="flex items-center space-x-2">
-            <Sparkles className="w-5 h-5 text-indigo-400" />
+            <Sparkles className="w-5 h-5 text-orange-400" />
             <h2 className="text-xl font-extrabold text-[var(--text-main)] font-display">AI Machine Learning Insights</h2>
           </div>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">Real-time demand forecasting, stockout risk prediction, and preparation ETA accuracy model.</p>
@@ -28,7 +28,7 @@ const AdminAIInsightsView = ({ stats, alerts = [], alertsContext, onRecalculateA
         <button
           onClick={onRecalculateAI}
           disabled={forecastingLoading}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
+          className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
         >
           <RefreshCw className={`w-4 h-4 ${forecastingLoading ? 'animate-spin' : ''}`} />
           <span>{forecastingLoading ? 'Calculating ML Models...' : 'Force Recalculate AI'}</span>
@@ -39,7 +39,7 @@ const AdminAIInsightsView = ({ stats, alerts = [], alertsContext, onRecalculateA
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         <div className="bg-[var(--card-bg)]/50 border border-[var(--border-color)] p-5 rounded-2xl shadow-lg space-y-2">
           <span className="text-[10px] uppercase font-black tracking-wider text-[var(--text-muted)]">Model Prediction Accuracy</span>
-          <h3 className="text-3xl font-extrabold text-indigo-400 font-mono">{metrics.etaAccuracy || 94.2}%</h3>
+          <h3 className="text-3xl font-extrabold text-orange-400 font-mono">{metrics.etaAccuracy || 94.2}%</h3>
           <p className="text-[10px] text-[var(--text-muted)]">Evaluated against actual preparation times</p>
         </div>
 
@@ -61,7 +61,7 @@ const AdminAIInsightsView = ({ stats, alerts = [], alertsContext, onRecalculateA
         {/* ML Demand Forecasts */}
         <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-6 rounded-2xl shadow-xl space-y-4">
           <h3 className="text-sm font-black text-[var(--text-main)] flex items-center space-x-2">
-            <BrainCircuit className="w-4 h-4 text-indigo-400" />
+            <BrainCircuit className="w-4 h-4 text-orange-400" />
             <span>Predicted Daily Demand Forecasts</span>
           </h3>
 
@@ -78,7 +78,7 @@ const AdminAIInsightsView = ({ stats, alerts = [], alertsContext, onRecalculateA
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono font-extrabold text-indigo-400 block">
+                    <span className="font-mono font-extrabold text-orange-400 block">
                       Est. Demand: ~{alert.predictedDemand || alert.currentStock * 2} units
                     </span>
                     <span className="text-[9px] text-[var(--text-muted)]">Cache: {alert.source || 'db-cache'}</span>

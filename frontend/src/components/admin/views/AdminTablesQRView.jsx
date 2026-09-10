@@ -130,7 +130,7 @@ const AdminTablesQRView = ({ showToast }) => {
         </head>
         <body>
           <div class="card">
-            <div class="logo">🍽️ SWIPEBITE POS</div>
+            <div class="logo">🍽️ ZOVIKPOS</div>
             <div class="subtitle">${table.branchName || 'Main Campus Canteen'}</div>
             <div class="table-num">${displayNum.startsWith('Table') ? displayNum : 'TABLE ' + displayNum}</div>
             <img class="qr-img" src="${table.qrDataUrl}" alt="${displayNum} QR" />
@@ -158,7 +158,7 @@ const AdminTablesQRView = ({ showToast }) => {
 
         <button
           onClick={() => setShowAddModal(true)}
-          className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
+          className="px-4 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-2 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Table</span>
@@ -185,7 +185,7 @@ const AdminTablesQRView = ({ showToast }) => {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
                     <div>
-                      <span className="text-[10px] font-black uppercase text-indigo-400">TABLE ID #{table.id}</span>
+                      <span className="text-[10px] font-black uppercase text-orange-400">TABLE ID #{table.id}</span>
                       <h3 className="text-lg font-extrabold text-[var(--text-main)] font-display">
                         {tableNumStr.startsWith('Table') ? tableNumStr : `Table ${tableNumStr}`}
                       </h3>
@@ -235,7 +235,7 @@ const AdminTablesQRView = ({ showToast }) => {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => handlePrintQRCard(table)}
-                      className="py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center space-x-1 cursor-pointer"
+                      className="py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center justify-center space-x-1 cursor-pointer"
                     >
                       <Printer className="w-3.5 h-3.5" />
                       <span>Print Card</span>
@@ -287,7 +287,7 @@ const AdminTablesQRView = ({ showToast }) => {
                   value={newTableNumber}
                   onChange={(e) => setNewTableNumber(e.target.value)}
                   placeholder="e.g. 5 or Patio 1"
-                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-indigo-500 font-mono"
+                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
                 />
               </div>
 
@@ -306,7 +306,7 @@ const AdminTablesQRView = ({ showToast }) => {
                 <button
                   type="submit"
                   disabled={actionLoading}
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-all shadow-md cursor-pointer"
+                  className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold transition-all shadow-md cursor-pointer"
                 >
                   Create Table
                 </button>

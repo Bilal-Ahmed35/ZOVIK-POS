@@ -22,12 +22,12 @@ const statusBadges = {
   PENDING: { label: 'PENDING', bg: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
   PAYMENT_PENDING: { label: 'PAYMENT PENDING', bg: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
   PAID: { label: 'PAID / VERIFIED', bg: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-  PREPARING: { label: 'PREPARING IN KITCHEN', bg: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30' },
-  READY: { label: 'READY FOR PICKUP', bg: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  PREPARING: { label: 'PREPARING IN KITCHEN', bg: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+  READY: { label: 'READY FOR PICKUP', bg: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
   COMPLETED: { label: 'COMPLETED', bg: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
   CANCELLED: { label: 'CANCELLED', bg: 'bg-rose-500/20 text-rose-400 border-rose-500/30' },
   PAYMENT_FAILED: { label: 'PAYMENT FAILED', bg: 'bg-red-500/20 text-red-400 border-red-500/30' },
-  REFUNDED: { label: 'REFUNDED', bg: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  REFUNDED: { label: 'REFUNDED', bg: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
 };
 
 const lifecycleSteps = ['PENDING', 'PAYMENT_PENDING', 'PAID', 'PREPARING', 'READY', 'COMPLETED'];
@@ -133,7 +133,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
           </button>
           <button
             onClick={handleExportPDF}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center space-x-1.5 cursor-pointer"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Export PDF</span>
@@ -159,7 +159,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
             onClick={() => setActiveTab(tab)}
             className={`px-3 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
               activeTab === tab
-                ? 'bg-indigo-600 text-white shadow-md'
+                ? 'bg-orange-600 text-white shadow-md'
                 : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-color)]'
             }`}
           >
@@ -177,7 +177,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search by Order #, Customer Email, Name, or Table..."
-            className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-indigo-500 transition-colors"
+            className="w-full pl-10 pr-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-colors"
           />
         </div>
 
@@ -185,7 +185,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
           <select
             value={paymentMethodFilter}
             onChange={(e) => setPaymentMethodFilter(e.target.value)}
-            className="w-full px-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+            className="w-full px-4 py-2.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500 transition-colors cursor-pointer"
           >
             <option value="ALL">All Payment Methods</option>
             <option value="COD">Pay at Counter (COD)</option>
@@ -227,7 +227,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
 
                   return (
                     <tr key={order.id} className="hover:bg-[var(--bg-color)]/40 transition-colors">
-                      <td className="p-4 font-mono font-extrabold text-indigo-400">
+                      <td className="p-4 font-mono font-extrabold text-orange-400">
                         {order.orderNumber}
                       </td>
                       <td className="p-4">
@@ -256,7 +256,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
                       <td className="p-4 text-right">
                         <button
                           onClick={() => setSelectedOrder(order)}
-                          className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl font-bold transition-all flex items-center space-x-1 ml-auto cursor-pointer"
+                          className="px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 rounded-xl font-bold transition-all flex items-center space-x-1 ml-auto cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
                           <span>View Details</span>
@@ -278,7 +278,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
             {/* Modal Header */}
             <div className="flex justify-between items-start border-b border-[var(--border-color)] pb-4">
               <div>
-                <span className="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                <span className="px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-orange-500/10 text-orange-400 border border-orange-500/20">
                   Detailed Lifecycle Inspection
                 </span>
                 <h3 className="text-xl font-extrabold text-[var(--text-main)] mt-1 font-mono">{selectedOrder.orderNumber}</h3>
@@ -306,13 +306,13 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
                       <div
                         className={`h-2 rounded-full mb-1.5 transition-all ${
                           isCurrent
-                            ? 'bg-indigo-500 shadow-md shadow-indigo-500/50'
+                            ? 'bg-orange-500 shadow-md shadow-orange-500/50'
                             : isPassed
                             ? 'bg-emerald-500'
                             : 'bg-[var(--border-color)]'
                         }`}
                       />
-                      <span className={`text-[9px] font-bold block ${isCurrent ? 'text-indigo-400' : isPassed ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`}>
+                      <span className={`text-[9px] font-bold block ${isCurrent ? 'text-orange-400' : isPassed ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`}>
                         {step.replace('_', ' ')}
                       </span>
                     </div>
@@ -345,7 +345,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
                       <strong className="text-[var(--text-main)] block font-bold">{item.nameSnapshot || item.menuItem?.name}</strong>
                       <span className="text-[10px] text-[var(--text-muted)]">Qty: {item.quantity} × Rs. {item.priceSnapshot?.toFixed(2)}</span>
                     </div>
-                    <span className="font-mono font-extrabold text-indigo-400">Rs. {(item.quantity * item.priceSnapshot).toFixed(2)}</span>
+                    <span className="font-mono font-extrabold text-orange-400">Rs. {(item.quantity * item.priceSnapshot).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
@@ -372,7 +372,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
               <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase block">Payment Info</span>
               <div className="flex justify-between">
                 <span>Method: <strong>{selectedOrder.paymentMethod}</strong></span>
-                <span>TxID: <strong className="font-mono text-indigo-400">{selectedOrder.payment?.transactionId || 'N/A'}</strong></span>
+                <span>TxID: <strong className="font-mono text-orange-400">{selectedOrder.payment?.transactionId || 'N/A'}</strong></span>
               </div>
             </div>
           </div>
