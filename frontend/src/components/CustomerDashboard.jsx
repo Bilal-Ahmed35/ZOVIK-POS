@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { setActiveAuthTokens } from '../services/api';
 import { getSocket } from '../services/socket';
+import { useCustomerMenu } from '../hooks/useCustomerMenu';
+import { useCustomerActiveOrders } from '../hooks/useCustomerActiveOrders';
 import {
   ShoppingBag,
   Sparkles,
@@ -21,6 +23,10 @@ import {
   Flame,
   Plus,
   Minus,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Utensils,
 } from 'lucide-react';
 import FAQModal from './FAQModal';
 
@@ -129,7 +135,7 @@ export const OtpInputBoxes = ({ value, onChange, disabled }) => {
 const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   const navigate = useNavigate();
 
-  const [menu, setMenu] = useState([]);
+  const { menu, isLoading: isMenuLoading } = useCustomerMenu();
   const [cart, setCart] = useState(() => {
     try {
       const saved = localStorage.getItem('customer_cart');
@@ -147,8 +153,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   const [sessionId, setSessionId] = useState(() => localStorage.getItem('customer_sessionId') || '');
   const [tableError, setTableError] = useState('');
   const [category, setCategory] = useState(() => localStorage.getItem('customer_category') || 'All');
-  const [activeOrders, setActiveOrders] = useState([]);
-  const [failedOrders, setFailedOrders] = useState([]);
+  const { activeOrders, failedOrders, refetch: refetchActiveOrders, dismissFailedOrder } = useCustomerActiveOrders();
   const activeOrder = activeOrders[0] || null;
   const [transferSuccessMessage, setTransferSuccessMessage] = useState('');
   const [transferLoading, setTransferLoading] = useState(false);
@@ -157,8 +162,11 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   const [error, setError] = useState('');
 
   // ─── Variant / Quantity Selection State ───────────────────────────────────
+  // expandedGroup: the groupKey of the currently-open food card (only one open at a time)
   const [expandedGroup, setExpandedGroup] = useState(null);
+  // pendingVariant: { [groupKey]: variantObject } — the selected variant pill per group
   const [pendingVariant, setPendingVariant] = useState({});
+  // pendingQty: { [variantId]: number } — EACH VARIANT has its own quantity, independent
   const [pendingQty, setPendingQty] = useState({});
 
   // ─── Session OTP Verification State ──────────────────────────────────────
@@ -368,12 +376,8 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
         localStorage.setItem('customer_tableId', newTableDisplay);
         localStorage.setItem('customer_tableToken', pendingTableToken);
 
-        // If there were active orders, update them; otherwise just refresh order list
-        if (res.data.orders && res.data.orders.length > 0) {
-          setActiveOrders(res.data.orders);
-        } else {
-          checkForExistingOrder(curSessionId);
-        }
+        // Refresh active orders list
+        refetchActiveOrders();
 
         // Re-sync cart from server to reflect updated session table context
         fetchServerCart(curSessionId);
@@ -403,8 +407,13 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   };
 
   const handleConfirmTableSwitch = async () => {
-    setShowTableSwitchModal(false);
-    if (!pendingTableToken) return;
+    if (transferLoading) return;
+    setTransferLoading(true);
+    if (!pendingTableToken) {
+      setShowTableSwitchModal(false);
+      setTransferLoading(false);
+      return;
+    }
 
     try {
       const res = await api.post('/sessions/start', {
@@ -436,11 +445,15 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
         fetchServerCart(newSessionId);
         checkForExistingOrder(newSessionId);
+        setShowTableSwitchModal(false);
         navigate('/customer', { replace: true });
       }
     } catch (err) {
       console.error('Table switch confirmation error:', err);
       setTableError(err.response?.data?.error || 'Failed to switch dining table.');
+      setShowTableSwitchModal(false);
+    } finally {
+      setTransferLoading(false);
     }
   };
 
@@ -465,9 +478,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
         targetTableNumber: newTableNumber,
       });
       if (res.data?.order) {
-        setActiveOrders(prev =>
-          prev.map(o => o.id === orderId ? { ...o, tableNumber: newTableNumber } : o)
-        );
+        refetchActiveOrders();
         setTransferSuccessMessage(`🍽️ Order delivery rerouted to ${newTableNumber}! Kitchen & cashier notified.`);
         setTimeout(() => setTransferSuccessMessage(''), 6000);
       }
@@ -497,6 +508,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
             description: i.description,
             category: i.category,
             stock: i.stock,
+            unit: i.unit || i.menuItem?.unit || '',
             imageUrl: i.imageUrl || i.menuItem?.imageUrl,
           };
         });
@@ -587,7 +599,8 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
     if (item?.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.trim() !== '') {
       const url = item.imageUrl.trim();
       if (url.startsWith('/uploads/')) {
-        return `http://localhost:5001${url}`;
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+        return `http://${host}:5001${url}`;
       }
       return url;
     }
@@ -628,130 +641,33 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
     }).catch(() => { });
   }, []);
 
-  useEffect(() => {
-    fetchMenu();
-    const curSessionId = sessionId || localStorage.getItem('customer_sessionId');
-    if (curSessionId) {
-      checkForExistingOrder(curSessionId);
-    }
-
-    const socket = getSocket();
-    if (socket) {
-      const ACTIVE_ORDER_STATUSES = ['PENDING', 'PAYMENT_PENDING', 'PAID', 'PREPARING', 'READY'];
-
-      const handleOrderUpdate = (updatedOrder) => {
-        setActiveOrders((prev) => {
-          if (!ACTIVE_ORDER_STATUSES.includes(updatedOrder.status)) {
-            return prev.filter((o) => o.id !== updatedOrder.id);
-          }
-          const exists = prev.some((o) => o.id === updatedOrder.id);
-          if (exists) {
-            return prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
-          }
-          const activeSId = sessionId || localStorage.getItem('customer_sessionId');
-          if (updatedOrder.sessionId === activeSId) {
-            return [updatedOrder, ...prev];
-          }
-          return prev;
-        });
-
-        if (updatedOrder.status === 'PAYMENT_FAILED') {
-          const dismissedIds = JSON.parse(localStorage.getItem('customer_dismissed_failed') || '[]');
-          if (!dismissedIds.includes(updatedOrder.id)) {
-            setFailedOrders((prev) => {
-              const exists = prev.some((o) => o.id === updatedOrder.id);
-              return exists ? prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)) : [updatedOrder, ...prev];
-            });
-          }
-        } else {
-          setFailedOrders((prev) => prev.filter((o) => o.id !== updatedOrder.id));
-        }
-      };
-
-      const handleTableShift = (data) => {
-        console.log('⚡ Table shift socket event received:', data);
-        const curSessionId = sessionId || localStorage.getItem('customer_sessionId');
-        if (curSessionId) checkForExistingOrder(curSessionId);
-      };
-
-      const handleMenuUpdate = (payload) => {
-        console.log('⚡ Real-time menu update received on Customer Dashboard:', payload);
-        fetchMenu();
-      };
-
-      socket.on('order:update', handleOrderUpdate);
-      socket.on('table:shift', handleTableShift);
-      socket.on('menu:update', handleMenuUpdate);
-      socket.on('inventory:update', handleMenuUpdate);
-      socket.on('connect', handleMenuUpdate);
-
-      return () => {
-        socket.off('order:update', handleOrderUpdate);
-        socket.off('table:shift', handleTableShift);
-        socket.off('menu:update', handleMenuUpdate);
-        socket.off('inventory:update', handleMenuUpdate);
-        socket.off('connect', handleMenuUpdate);
-      };
-    }
-  }, [sessionId]);
-
-  const fetchMenu = async () => {
-    try {
-      const response = await api.get('/menu');
-      const items = response.data.items || [];
-      setMenu(items);
-    } catch (err) {
-      console.error('Fetch menu failed:', err);
-    }
+  const checkForExistingOrder = () => {
+    refetchActiveOrders();
   };
 
-  const checkForExistingOrder = async (sId) => {
-    const curSessionId = sId || sessionId || localStorage.getItem('customer_sessionId');
-    if (!curSessionId) {
-      setActiveOrders([]);
-      setFailedOrders([]);
-      return;
-    }
-    try {
-      const response = await api.get(`/orders?sessionId=${curSessionId}`);
-      const orders = response.data.orders || [];
-      const ACTIVE_ORDER_STATUSES = ['PENDING', 'PAYMENT_PENDING', 'PAID', 'PREPARING', 'READY'];
-      const unfinished = orders.filter((o) =>
-        ACTIVE_ORDER_STATUSES.includes(o.status)
-      );
-      const dismissedIds = JSON.parse(localStorage.getItem('customer_dismissed_failed') || '[]');
-      const failed = orders.filter(
-        (o) => o.status === 'PAYMENT_FAILED' && !dismissedIds.includes(o.id)
-      );
-      setActiveOrders(unfinished);
-      setFailedOrders(failed);
-    } catch (err) {
-      console.error('Check orders failed:', err);
-    }
-  };
-
-  const handleDismissFailedOrders = async () => {
-    const dismissedIds = JSON.parse(localStorage.getItem('customer_dismissed_failed') || '[]');
+  const handleDismissFailedOrders = () => {
     for (const fo of failedOrders) {
-      if (!dismissedIds.includes(fo.id)) dismissedIds.push(fo.id);
+      dismissFailedOrder(fo.id);
       api.put(`/orders/${fo.id}/status`, { status: 'CANCELLED', note: 'Customer dismissed failed payment' }).catch(() => { });
     }
-    localStorage.setItem('customer_dismissed_failed', JSON.stringify(dismissedIds));
-    setFailedOrders([]);
   };
 
   // ─── Cart handlers (syncs with backend session cart) ──────────────────────
   const addToCart = async (item) => {
-    setCart((prev) => ({
-      ...prev,
-      [item.id]: { ...item, quantity: (prev[item.id]?.quantity || 0) + 1 },
-    }));
+    let targetQuantity = 1;
+    setCart((prev) => {
+      targetQuantity = (prev[item.id]?.quantity || 0) + 1;
+      return {
+        ...prev,
+        [item.id]: { ...item, quantity: targetQuantity },
+      };
+    });
 
     if (sessionId) {
       try {
         await api.post(`/cart/${sessionId}/items`, {
           menuItemId: item.id,
-          quantity: (cart[item.id]?.quantity || 0) + 1,
+          quantity: targetQuantity,
         });
       } catch (err) {
         console.warn('Backend cart add warning:', err.message);
@@ -760,56 +676,75 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   };
 
   const removeFromCart = async (itemId) => {
-    const currentQty = cart[itemId]?.quantity || 0;
-    if (currentQty <= 1) {
-      const updated = { ...cart };
-      delete updated[itemId];
-      setCart(updated);
-      if (sessionId) {
-        try {
-          await api.delete(`/cart/${sessionId}/items/${itemId}`);
-        } catch (err) {
-          console.warn('Backend cart remove warning:', err.message);
-        }
+    let isDeleting = false;
+    let targetQuantity = 0;
+
+    setCart((prev) => {
+      const currentQty = prev[itemId]?.quantity || 0;
+      if (currentQty <= 1) {
+        isDeleting = true;
+        const updated = { ...prev };
+        delete updated[itemId];
+        return updated;
       }
-    } else {
-      setCart((prev) => ({
+      targetQuantity = currentQty - 1;
+      return {
         ...prev,
-        [itemId]: { ...prev[itemId], quantity: currentQty - 1 },
-      }));
-      if (sessionId) {
-        try {
+        [itemId]: { ...prev[itemId], quantity: targetQuantity },
+      };
+    });
+
+    if (sessionId) {
+      try {
+        if (isDeleting) {
+          await api.delete(`/cart/${sessionId}/items/${itemId}`);
+        } else {
           await api.post(`/cart/${sessionId}/items`, {
             menuItemId: itemId,
-            quantity: currentQty - 1,
+            quantity: targetQuantity,
           });
-        } catch (err) {
-          console.warn('Backend cart decrement warning:', err.message);
         }
+      } catch (err) {
+        console.warn('Backend cart remove warning:', err.message);
       }
     }
   };
 
-  // Add a specific variant with a chosen quantity to cart
-  const handleAddWithVariantAndQty = async (item, qty, groupKey) => {
-    const existingQty = cart[item.id]?.quantity || 0;
-    const newQty = existingQty + qty;
-    setCart((prev) => ({
-      ...prev,
-      [item.id]: { ...item, quantity: newQty },
-    }));
+  // Add a specific variant with its per-variant quantity to cart.
+  // Same variant (same menuItemId) is MERGED (qty accumulates).
+  // Different variants (different menuItemId) remain SEPARATE cart lines.
+  const handleAddWithVariantAndQty = async (item, groupKey) => {
+    const variantQty = pendingQty[item.id] || 1;
+    // Optimistically update cart: merge if same variant already exists
+    let finalQty = variantQty;
+    setCart((prev) => {
+      const existing = prev[item.id];
+      finalQty = (existing?.quantity || 0) + variantQty;
+      return {
+        ...prev,
+        [item.id]: {
+          ...item,
+          quantity: finalQty,
+          // Preserve unit so cart page can display variant label
+          unit: item.unit || '',
+        },
+      };
+    });
+
     if (sessionId) {
       try {
         await api.post(`/cart/${sessionId}/items`, {
           menuItemId: item.id,
-          quantity: newQty,
+          quantity: finalQty,
         });
       } catch (err) {
         console.warn('Backend cart add warning:', err.message);
       }
     }
+
+    // Close expanded panel; reset THIS variant's qty back to 1 for next open
     setExpandedGroup(null);
-    setPendingQty((prev) => ({ ...prev, [groupKey]: 1 }));
+    setPendingQty((prev) => ({ ...prev, [item.id]: 1 }));
   };
 
   const totalCartQuantity = Object.values(cart).reduce((sum, item) => sum + item.quantity, 0);
@@ -840,60 +775,145 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
     return Object.values(groups);
   }, [filteredMenu]);
 
-  const heroFoodImage = 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&auto=format&fit=crop&q=80';
+  // ─── Promotional Carousel ────────────────────────────────────────────────
+  const promoSlides = useMemo(() => [
+    {
+      headline: 'Authentic Flavors & Fresh Cooking ✨',
+      sub: 'Prepared fresh on order using premium ingredients & traditional recipes.',
+      bg: 'from-[#EA580C] via-[#E85D2A] to-[#C2410C]',
+      icon: '👨‍🍳',
+    },
+    {
+      headline: 'Signature Biryani & Karahi 🍛',
+      sub: 'Fragrant basmati rice, tender meats & aromatic clay-pot gravies.',
+      bg: 'from-[#D97706] via-[#B45309] to-[#92400E]',
+      icon: '🍚',
+    },
+    {
+      headline: 'Chilled Drinks & Shakes 🥤',
+      sub: 'Pair your meal with fresh juices, seasonal shakes & iced tea.',
+      bg: 'from-[#C2410C] via-[#EA580C] to-[#D97706]',
+      icon: '🧃',
+    },
+    {
+      headline: 'Fast & Easy Smart Dining ⚡',
+      sub: 'Order directly from your table — instant kitchen sync & quick delivery.',
+      bg: 'from-[#9A3412] via-[#C2410C] to-[#EA580C]',
+      icon: '📱',
+    },
+  ], []);
+
+  const [promoIndex, setPromoIndex] = useState(0);
+  const promoTimerRef = React.useRef(null);
+  const touchStartX = React.useRef(0);
+  const touchEndX = React.useRef(0);
+
+  const startAutoplay = React.useCallback(() => {
+    if (promoTimerRef.current) clearInterval(promoTimerRef.current);
+    promoTimerRef.current = setInterval(() => {
+      setPromoIndex((prev) => (prev + 1) % promoSlides.length);
+    }, 5000);
+  }, [promoSlides.length]);
+
+  useEffect(() => {
+    startAutoplay();
+    return () => {
+      if (promoTimerRef.current) clearInterval(promoTimerRef.current);
+    };
+  }, [startAutoplay]);
+
+  const goToSlide = (idx) => {
+    setPromoIndex(idx);
+    startAutoplay();
+  };
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e) => {
+    touchEndX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    const diffX = touchStartX.current - touchEndX.current;
+    const minSwipeDistance = 40; // minimum 40px swipe threshold
+
+    if (diffX > minSwipeDistance) {
+      // Swiped Left -> Next slide
+      goToSlide((promoIndex + 1) % promoSlides.length);
+    } else if (diffX < -minSwipeDistance) {
+      // Swiped Right -> Previous slide
+      goToSlide((promoIndex - 1 + promoSlides.length) % promoSlides.length);
+    }
+
+    touchStartX.current = 0;
+    touchEndX.current = 0;
+  };
 
   return (
-    <div className="min-h-screen bg-[#FAF9F7] text-[#171717] flex flex-col font-sans selection:bg-[#F97316]/20">
-      {/* ── Top Application Header ─────────────────────────────────────────────── */}
-      <header className="bg-white/90 backdrop-blur-md border-b border-[#E7E5E4] px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center z-30 sticky top-0 shadow-sm transition-all">
-        <div className="flex items-center space-x-3 sm:space-x-4">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#E85D2A] to-[#FB923C] flex items-center justify-center text-white text-lg font-black shadow-md shadow-[#E85D2A]/20">
-              🍽️
+    <div className="min-h-screen bg-[#FAF9F7] dark:bg-[#121212] text-[#171717] dark:text-[#E5E5E5] flex flex-col font-sans selection:bg-[#F97316]/20">
+      {/* ── Top Application Header — Premium Redesign ───────────────────────── */}
+      <header className="bg-white/80 dark:bg-[#1A1A1A]/80 backdrop-blur-xl border-b border-[#E7E5E4] dark:border-[#333] sticky top-0 z-30 shadow-sm transition-all">
+        {/* Row 1: Branding + Actions */}
+        <div className="px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#E85D2A] to-[#FB923C] flex items-center justify-center text-white text-lg font-black shadow-lg shadow-[#E85D2A]/25 shrink-0">
+              <Utensils className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
-                <h2 className="text-base sm:text-lg font-black tracking-tight text-[#171717] font-display">
-                  ZOVIKPOS
-                </h2>
-                <span className="text-[11px] bg-[#E85D2A]/10 text-[#E85D2A] border border-[#E85D2A]/20 px-2.5 py-0.5 rounded-full font-extrabold uppercase">
-                  {tableId}
-                </span>
-              </div>
-              <div className="flex items-center space-x-2 text-[11px] text-[#78716C] font-medium">
-                <span>Scan Time: {scanTime}</span>
-                <span>•</span>
-                <span>Welcome, {authName || guestName || 'Customer'}</span>
-              </div>
+              <h2 className="text-base sm:text-lg font-black tracking-tight text-[#171717] dark:text-white leading-none">
+                ZOVIKPOS
+              </h2>
+              <span className="text-[10px] font-bold text-[#78716C] dark:text-[#A8A29E] tracking-wide">
+                Smart Dining Experience
+              </span>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              onClick={() => setShowFAQ(true)}
+              className="w-10 h-10 sm:w-auto sm:h-auto sm:px-4 sm:py-2.5 text-xs font-bold text-[#78716C] dark:text-[#A8A29E] hover:text-[#E85D2A] hover:bg-[#E85D2A]/5 dark:hover:bg-[#E85D2A]/10 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-transparent hover:border-[#E85D2A]/20"
+              title="Help & FAQ"
+            >
+              <HelpCircle className="w-5 h-5 sm:w-4 sm:h-4 text-[#E85D2A]" />
+              <span className="hidden sm:inline">Help</span>
+            </button>
+
+            {/* Cart Header Button (Only visible after login / OTP verification) */}
+            {isSessionVerified && (
+              <button
+                onClick={() => navigate('/customer/cart')}
+                className="relative h-10 px-4 sm:px-5 sm:py-2.5 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-95 text-white rounded-2xl text-xs font-bold transition-all shadow-lg shadow-[#E85D2A]/25 flex items-center gap-2 cursor-pointer"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span className="hidden sm:inline">Cart</span>
+                {totalCartQuantity > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-white text-[#E85D2A] w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] shadow-md ring-2 ring-[#E85D2A] animate-scale-up">
+                    {totalCartQuantity}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center space-x-2 sm:space-x-3">
-          <button
-            onClick={() => setShowFAQ(true)}
-            className="p-2 sm:px-3 sm:py-2 text-xs font-bold text-[#78716C] hover:text-[#E85D2A] hover:bg-[#E85D2A]/5 rounded-xl transition-all flex items-center space-x-1.5 cursor-pointer"
-            title="Help & FAQ"
-          >
-            <HelpCircle className="w-4 h-4 text-[#E85D2A]" />
-            <span className="hidden sm:inline">Help</span>
-          </button>
-
-          {/* Cart Header Button (Only visible after login / OTP verification) */}
-          {isSessionVerified && (
-            <button
-              onClick={() => navigate('/customer/cart')}
-              className="relative px-4 py-2 sm:py-2.5 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-95 text-white rounded-2xl text-xs font-bold transition-all shadow-md shadow-[#E85D2A]/25 flex items-center space-x-2 cursor-pointer"
-            >
-              <ShoppingBag className="w-4 h-4" />
-              <span className="hidden sm:inline">Cart</span>
-              {totalCartQuantity > 0 && (
-                <span className="bg-white text-[#E85D2A] w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] shadow-sm animate-scale-up">
-                  {totalCartQuantity}
-                </span>
-              )}
-            </button>
-          )}
+        {/* Row 2: Session Info Bar */}
+        <div className="px-4 sm:px-6 lg:px-8 pb-3 flex items-center gap-2 sm:gap-3 flex-wrap text-[11px]">
+          <span className="inline-flex items-center gap-1.5 bg-[#E85D2A]/10 dark:bg-[#E85D2A]/15 text-[#E85D2A] border border-[#E85D2A]/20 px-3 py-1.5 rounded-full font-extrabold uppercase tracking-wide">
+            <MapPin className="w-3 h-3" />
+            {tableId}
+          </span>
+          <span className="inline-flex items-center gap-1.5 bg-[#FAF9F7] dark:bg-[#2A2A2A] text-[#78716C] dark:text-[#A8A29E] border border-[#E7E5E4] dark:border-[#333] px-3 py-1.5 rounded-full font-bold">
+            <Clock className="w-3 h-3" />
+            {scanTime}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[#78716C] dark:text-[#A8A29E] font-medium">
+            <User className="w-3 h-3" />
+            Welcome, <strong className="text-[#171717] dark:text-white font-bold">{authName || guestName || 'Customer'}</strong>
+          </span>
         </div>
       </header>
 
@@ -961,10 +981,17 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
               {/* Primary Option 2: Start Fresh */}
               <button
+                disabled={transferLoading}
                 onClick={handleConfirmTableSwitch}
-                className="w-full py-3 bg-[#E85D2A] hover:bg-[#D94E1B] text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center space-x-2"
+                className="w-full py-3 bg-[#E85D2A] hover:bg-[#D94E1B] disabled:opacity-50 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer flex items-center justify-center space-x-2"
               >
-                <span>{totalCartQuantity > 0 || activeOrders.length > 0 ? `Start Fresh Session at ${pendingTableNumber}` : `Switch to ${pendingTableNumber}`}</span>
+                <span>
+                  {transferLoading
+                    ? 'Switching...'
+                    : totalCartQuantity > 0 || activeOrders.length > 0
+                    ? `Start Fresh Session at ${pendingTableNumber}`
+                    : `Switch to ${pendingTableNumber}`}
+                </span>
               </button>
 
               {/* Cancel Option */}
@@ -980,7 +1007,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
       )}
 
       {/* ── Main content ─────────────────────────────────────────────────────── */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6 dark:text-[#E5E5E5]">
 
         {/* Table QR Error */}
         {tableError && (
@@ -1129,7 +1156,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
             {/* Active Order Banner — ZovikPOS Premium */}
             {activeOrders.length === 1 && (
-              <div className="bg-white border border-[#E85D2A]/25 p-4 sm:p-5 rounded-3xl shadow-md shadow-[#E85D2A]/8 relative overflow-hidden">
+              <div className="bg-white dark:bg-[#1E1E1E] border border-[#E85D2A]/25 dark:border-[#E85D2A]/40 p-4 sm:p-5 rounded-3xl shadow-md shadow-[#E85D2A]/8 relative overflow-hidden">
                 <div className="absolute inset-0 bg-gradient-to-br from-orange-50/60 via-transparent to-transparent pointer-events-none" />
                 <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center space-x-3">
@@ -1141,16 +1168,16 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <strong className="text-sm font-black text-[#171717]">
+                        <strong className="text-sm font-black text-[#171717] dark:text-[#E5E5E5]">
                           Order {activeOrders[0].orderNumber || `#${activeOrders[0].id}`}
                         </strong>
-                        <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#E85D2A]/10 text-[#E85D2A] border border-[#E85D2A]/20 uppercase tracking-wide">
+                        <span className="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-[#E85D2A]/10 dark:bg-[#E85D2A]/20 text-[#E85D2A] dark:text-orange-400 border border-[#E85D2A]/20 uppercase tracking-wide">
                           {activeOrders[0].status}
                         </span>
                       </div>
-                      <p className="text-[11px] text-[#78716C] mt-0.5">
+                      <p className="text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-0.5">
                         Delivering to:{' '}
-                        <strong className="text-[#171717] font-bold bg-[#FAF9F7] px-2 py-0.5 rounded-lg border border-[#E7E5E4]">
+                        <strong className="text-[#171717] dark:text-white font-bold bg-[#FAF9F7] dark:bg-[#2A2A2A] px-2 py-0.5 rounded-lg border border-[#E7E5E4] dark:border-[#404040]">
                           {activeOrders[0].tableNumber || tableId}
                         </strong>
                       </p>
@@ -1166,7 +1193,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                           setDeliveryChangeTarget(activeOrders[0].tableNumber || tableId);
                         }
                       }}
-                      className="px-3 py-2 bg-white hover:bg-[#FAF9F7] text-[#171717] border border-[#E7E5E4] font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1"
+                      className="px-3 py-2 bg-white dark:bg-[#2A2A2A] hover:bg-[#FAF9F7] dark:hover:bg-[#333] text-[#171717] dark:text-[#E5E5E5] border border-[#E7E5E4] dark:border-[#404040] font-bold rounded-xl text-xs transition-all cursor-pointer flex items-center gap-1"
                     >
                       <span>📍</span>
                       <span className="hidden sm:inline">Change Seat</span>
@@ -1219,15 +1246,15 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
             )}
 
             {activeOrders.length > 1 && (
-              <div className="bg-white border border-[#E85D2A]/25 p-4 sm:p-5 rounded-3xl space-y-3 shadow-md shadow-[#E85D2A]/8">
+              <div className="bg-white dark:bg-[#1E1E1E] border border-[#E85D2A]/25 dark:border-[#E85D2A]/40 p-4 sm:p-5 rounded-3xl space-y-3 shadow-md shadow-[#E85D2A]/8">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                    <span className="text-xs font-black uppercase tracking-wider text-orange-950">
+                    <span className="text-xs font-black uppercase tracking-wider text-orange-950 dark:text-orange-300">
                       Active Orders in Progress ({activeOrders.length})
                     </span>
                   </div>
-                  <span className="text-[11px] font-bold text-[#E85D2A] bg-orange-50 px-2.5 py-1 rounded-full border border-orange-100">
+                  <span className="text-[11px] font-bold text-[#E85D2A] dark:text-orange-400 bg-orange-50 dark:bg-orange-950/40 px-2.5 py-1 rounded-full border border-orange-100 dark:border-orange-900/50">
                     Live Kitchen Sync
                   </span>
                 </div>
@@ -1305,25 +1332,33 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
               </div>
             )}
 
-            {/* Failed Payment Notice with 1-Click Dismiss */}
+            {/* Failed/Rejected Order Notice with 1-Click Dismiss */}
             {failedOrders.length > 0 && (
-              <div className="bg-rose-50/90 border border-rose-200/90 p-4 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-fade-in">
+              <div className="bg-rose-50/90 dark:bg-rose-950/40 border border-rose-200/90 dark:border-rose-900/60 p-4 sm:p-5 rounded-3xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-sm animate-fade-in">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                    <AlertCircle className="w-4 h-4" />
+                  <div className="w-9 h-9 rounded-2xl bg-rose-100 dark:bg-rose-900/50 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                    <AlertCircle className="w-5 h-5" />
                   </div>
                   <div>
-                    <strong className="text-rose-900 font-bold block text-sm">
-                      Payment Incomplete ({failedOrders.length} order{failedOrders.length > 1 ? 's' : ''})
+                    <strong className="text-rose-950 dark:text-rose-200 font-extrabold block text-sm">
+                      {failedOrders[0]?.status === 'REJECTED'
+                        ? 'Order Rejected by Kitchen'
+                        : failedOrders[0]?.status === 'CANCELLED'
+                        ? 'Order Cancelled'
+                        : 'Payment Incomplete'} ({failedOrders.length} order{failedOrders.length > 1 ? 's' : ''})
                     </strong>
-                    <span className="text-rose-700/80 text-[11px]">
-                      {failedOrders.map(f => f.orderNumber).join(', ')} — Not sent to kitchen. You can re-order from cart or dismiss this notice.
+                    <span className="text-rose-800/80 dark:text-rose-300/80 text-[11px]">
+                      {failedOrders.map(f => (
+                        <span key={f.id} className="inline-block mr-2">
+                          Order {f.orderNumber || `#${f.id}`}{f.status === 'REJECTED' ? (f.rejectionReason ? `: ${f.rejectionReason}` : ' (Rejected by vendor/kitchen)') : ' — Payment incomplete'}
+                        </span>
+                      ))}
                     </span>
                   </div>
                 </div>
                 <button
                   onClick={handleDismissFailedOrders}
-                  className="px-3.5 py-1.5 bg-white hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-[11px] border border-rose-200 transition-all shadow-xs cursor-pointer shrink-0 self-end sm:self-auto"
+                  className="px-3.5 py-1.5 bg-white dark:bg-[#2A2A2A] hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-700 dark:text-rose-300 font-bold rounded-xl text-[11px] border border-rose-200 dark:border-rose-800 transition-all shadow-xs cursor-pointer shrink-0 self-end sm:self-auto"
                 >
                   ✕ Dismiss Notice
                 </button>
@@ -1332,79 +1367,108 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
             {/* ── MENU VIEW ──────────────────────────────────────────────────────── */}
             <div className="space-y-6">
-              {/* HERO BANNER — PREMIUM */}
-              <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-[#E85D2A] via-[#F97316] to-[#EA580C] text-white p-5 sm:p-8 lg:p-10 shadow-xl shadow-[#E85D2A]/25 border border-white/10">
-                <div className="absolute top-0 right-0 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-orange-500/20 rounded-full blur-2xl pointer-events-none" />
+              {/* PROMOTIONAL CAROUSEL — Auto-rotating & Touch Swipable */}
+              <div
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                className="relative overflow-hidden rounded-[28px] shadow-xl border border-white/10 select-none touch-pan-y"
+              >
+                {/* Slides */}
+                {promoSlides.map((slide, idx) => (
+                  <div
+                    key={idx}
+                    className={`${idx === promoIndex ? 'block' : 'hidden'} relative bg-gradient-to-br ${slide.bg} text-white p-6 sm:p-8 lg:p-10 transition-all duration-500`}
+                  >
+                    {/* Decorative blurs */}
+                    <div className="absolute top-0 right-0 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-black/5 rounded-full blur-2xl pointer-events-none" />
 
-                <div className="grid grid-cols-1 md:grid-cols-12 items-center gap-4 sm:gap-6 relative z-10">
-                  <div className="md:col-span-7 space-y-3 sm:space-y-4">
-                    <div className="inline-flex items-center space-x-2 px-3 py-1 bg-white/15 backdrop-blur-sm rounded-full text-[10px] sm:text-[11px] font-extrabold tracking-wider uppercase border border-white/20">
-                      <Sparkles className="w-3 h-3 text-amber-300" />
-                      <span>Fresh &amp; Smart Canteen</span>
-                    </div>
+                    <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex-1 space-y-3">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-sm rounded-full text-[10px] sm:text-[11px] font-extrabold tracking-wider uppercase border border-white/20">
+                          <Sparkles className="w-3 h-3 text-amber-300" />
+                          <span>ZovikPOS • Smart Dining</span>
+                        </div>
 
-                    <h1 className="text-2xl sm:text-3xl lg:text-5xl font-black tracking-tight leading-tight font-display">
-                      Good food.<br className="hidden sm:block" /> Great mood. ✨
-                    </h1>
+                        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight">
+                          {slide.headline}
+                        </h1>
 
-                    <p className="text-[11px] sm:text-sm text-orange-100 max-w-md leading-relaxed">
-                      Freshly prepared. Just for you.{' '}
-                      <span className="text-orange-200 font-medium text-[10px] sm:text-[11px] block sm:inline mt-0.5 sm:mt-0">AI powered kitchen • Faster queue handling</span>
-                    </p>
+                        <p className="text-[11px] sm:text-sm text-white/80 max-w-md leading-relaxed">
+                          {slide.sub}
+                        </p>
 
-                    <button
-                      onClick={() => navigate('/customer/cart')}
-                      className="inline-flex items-center space-x-2 px-5 py-2.5 sm:px-6 sm:py-3 bg-white hover:bg-orange-50 text-[#E85D2A] font-extrabold text-xs rounded-2xl shadow-xl active:scale-95 transition-all cursor-pointer"
-                    >
-                      <ShoppingBag className="w-4 h-4 text-[#E85D2A]" />
-                      <span>View Cart {totalCartQuantity > 0 ? `(${totalCartQuantity})` : ''}</span>
-                      <ArrowRight className="w-4 h-4 text-[#E85D2A]" />
-                    </button>
-                  </div>
+                        <button
+                          onClick={() => navigate('/customer/cart')}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 bg-white hover:bg-white/90 text-[#171717] font-extrabold text-xs rounded-2xl shadow-xl active:scale-95 transition-all cursor-pointer"
+                        >
+                          <ShoppingBag className="w-4 h-4" />
+                          <span>View Cart {totalCartQuantity > 0 ? `(${totalCartQuantity})` : ''}</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
 
-                  <div className="md:col-span-5 relative flex justify-center items-center hidden sm:flex">
-                    <div className="relative w-48 h-48 sm:w-56 sm:h-56 lg:w-64 lg:h-64 rounded-3xl overflow-hidden border-4 border-white/20 shadow-2xl transition-transform duration-500 hover:scale-105">
-                      <img
-                        src={heroFoodImage}
-                        alt="Featured Food"
-                        className="w-full h-full object-cover"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
-                    </div>
-                    <div className="absolute -top-2 right-0 sm:right-4 bg-white/95 backdrop-blur-md text-[#171717] px-3 py-2 rounded-2xl shadow-xl flex items-center space-x-2 border border-[#E7E5E4]">
-                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                      <div>
-                        <strong className="text-xs font-black block leading-none">4.9 ⭐</strong>
-                        <span className="text-[9px] text-[#78716C] font-bold">100+ reviews</span>
+                      {/* Large emoji icon on desktop */}
+                      <div className="hidden sm:flex items-center justify-center w-28 h-28 lg:w-36 lg:h-36 text-6xl lg:text-7xl bg-white/10 backdrop-blur-sm rounded-3xl border border-white/20 shadow-2xl shrink-0">
+                        {slide.icon}
                       </div>
                     </div>
                   </div>
+                ))}
+
+                {/* Carousel Arrows (desktop) */}
+                <button
+                  onClick={() => goToSlide((promoIndex - 1 + promoSlides.length) % promoSlides.length)}
+                  className="hidden sm:flex absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full items-center justify-center text-white transition-all cursor-pointer z-20"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => goToSlide((promoIndex + 1) % promoSlides.length)}
+                  className="hidden sm:flex absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full items-center justify-center text-white transition-all cursor-pointer z-20"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+
+                {/* Pagination Dots */}
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                  {promoSlides.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => goToSlide(idx)}
+                      className={`rounded-full transition-all duration-300 cursor-pointer ${
+                        idx === promoIndex
+                          ? 'w-6 h-2 bg-white'
+                          : 'w-2 h-2 bg-white/40 hover:bg-white/60'
+                      }`}
+                    />
+                  ))}
                 </div>
               </div>
 
-              {/* SEARCH BAR — PROFESSIONAL INPUT */}
+              {/* SEARCH BAR — PREMIUM */}
               <div className="space-y-5">
-                <div className="relative">
+                <div className="relative group">
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search for biryani, zinger burgers, chai, fries..."
-                    className="w-full bg-white border border-[#E7E5E4] rounded-2xl px-5 py-4 pl-12 text-xs text-[#171717] placeholder-[#78716C] focus:outline-none focus:border-[#E85D2A] focus:ring-4 focus:ring-[#E85D2A]/10 transition-all shadow-sm font-medium"
+                    className="w-full bg-white dark:bg-[#2A2A2A] border border-[#E7E5E4] dark:border-[#404040] rounded-2xl px-5 py-4 pl-12 text-sm text-[#171717] dark:text-[#E5E5E5] placeholder-[#A8A29E] dark:placeholder-[#6B7280] focus:outline-none focus:border-[#E85D2A] focus:ring-4 focus:ring-[#E85D2A]/10 dark:focus:ring-[#E85D2A]/20 transition-all shadow-sm hover:shadow-md font-medium"
                   />
-                  <Search className="w-5 h-5 text-[#78716C] absolute left-4 top-3.5" />
+                  <Search className="w-5 h-5 text-[#A8A29E] dark:text-[#6B7280] group-focus-within:text-[#E85D2A] absolute left-4 top-4 transition-colors" />
                 </div>
 
                 {/* CATEGORY FILTERS */}
-                <div className="flex items-center space-x-2.5 overflow-x-auto pb-2 scrollbar-none">
+                <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
                   {combinedCategories.map((cat) => (
                     <button
                       key={cat}
                       onClick={() => setCategory(cat)}
                       className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold whitespace-nowrap transition-all duration-200 cursor-pointer ${category === cat
-                          ? 'bg-[#E85D2A] text-white shadow-md shadow-[#E85D2A]/25 border border-[#E85D2A]'
-                          : 'bg-white border border-[#E7E5E4] text-[#78716C] hover:border-[#E85D2A]/40 hover:text-[#E85D2A]'
+                          ? 'bg-[#E85D2A] text-white shadow-md shadow-[#E85D2A]/25 border border-[#E85D2A] scale-105'
+                          : 'bg-white dark:bg-[#2A2A2A] border border-[#E7E5E4] dark:border-[#404040] text-[#78716C] dark:text-[#A8A29E] hover:border-[#E85D2A]/40 hover:text-[#E85D2A]'
                         }`}
                     >
                       {cat}
@@ -1414,35 +1478,47 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
               </div>
 
               {/* FOOD PRODUCTS GRID — Premium mobile-first layout */}
-              {filteredGrouped.length === 0 ? (
-                <div className="py-16 text-center text-xs font-bold text-[#78716C] bg-white border border-[#E7E5E4] rounded-3xl p-8 shadow-xs">
+              {isMenuLoading && menu.length === 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div key={i} className="bg-white dark:bg-[#2A2A2A] rounded-2xl p-4 border border-[#E7E5E4] dark:border-[#404040] animate-pulse space-y-3">
+                      <div className="w-full h-36 bg-stone-200 dark:bg-stone-700 rounded-xl" />
+                      <div className="h-4 bg-stone-200 dark:bg-stone-700 rounded w-3/4" />
+                      <div className="h-3 bg-stone-200 dark:bg-stone-700 rounded w-1/2" />
+                    </div>
+                  ))}
+                </div>
+              ) : filteredGrouped.length === 0 ? (
+                <div className="py-16 text-center text-xs font-bold text-[#78716C] bg-white dark:bg-[#2A2A2A] border border-[#E7E5E4] dark:border-[#404040] rounded-3xl p-8 shadow-xs">
                   <div className="text-3xl mb-3">🍽️</div>
-                  <p className="text-sm font-extrabold text-[#171717]">No dishes found</p>
-                  <p className="text-xs text-[#78716C] mt-1">Try a different category or search term.</p>
+                  <p className="text-sm font-extrabold text-[#171717] dark:text-white">No dishes found</p>
+                  <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-1">Try a different category or search term.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 items-start">
                   {filteredGrouped.map(({ groupKey, variants }) => {
                     const isExpanded = expandedGroup === groupKey;
                     const selectedVariant = pendingVariant[groupKey] || variants[0];
-                    const qty = pendingQty[groupKey] || 1;
+                    // Per-variant independent quantity — keyed by variant's own id
+                    const currentVariantQty = pendingQty[selectedVariant.id] || 1;
                     const inCartQty = variants.reduce((sum, v) => sum + (cart[v.id]?.quantity || 0), 0);
-                    const isOutOfStock = selectedVariant.stock <= 0;
+                    const isOutOfStock = variants.every((v) => v.stock <= 0);
+                    const isSelectedOutOfStock = selectedVariant.stock <= 0;
 
                     return (
                       <div
                         key={groupKey}
-                        className={`bg-white overflow-hidden flex transition-all duration-300 group ${
+                        className={`bg-white dark:bg-[#2A2A2A] overflow-hidden flex transition-all duration-300 group ${
                           isExpanded
                             ? 'flex-col rounded-2xl border-2 border-[#E85D2A] shadow-xl ring-4 ring-[#E85D2A]/8'
-                            : 'sm:flex-col flex-row rounded-2xl sm:rounded-2xl border border-[#E7E5E4] hover:border-[#E85D2A]/40 hover:shadow-lg'
+                            : 'sm:flex-col flex-row rounded-2xl border border-[#E7E5E4] dark:border-[#404040] hover:border-[#E85D2A]/40 hover:shadow-lg hover:-translate-y-0.5'
                         } ${isOutOfStock ? 'opacity-60' : ''}`}
                       >
-                        {/* Food Image — horizontal on mobile (left), vertical on tablet+ */}
+                        {/* Food Image — fixed square on mobile row, fixed ratio on tablet/desktop */}
                         <div className={`relative overflow-hidden bg-[#FAF9F7] shrink-0 ${
                           isExpanded
                             ? 'aspect-[16/9] w-full'
-                            : 'sm:aspect-[4/3] sm:w-full w-28 h-full sm:h-auto rounded-l-2xl sm:rounded-t-2xl sm:rounded-bl-none'
+                            : 'w-32 h-32 sm:w-full sm:h-44 rounded-l-2xl sm:rounded-t-2xl sm:rounded-bl-none'
                         }`}>
                           <img
                             src={getItemImage(selectedVariant)}
@@ -1477,11 +1553,11 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                         {/* Card Body */}
                         <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between min-w-0">
                           <div className="flex-1">
-                            <h3 className="font-extrabold text-sm text-[#171717] group-hover:text-[#E85D2A] transition-colors leading-snug line-clamp-2">
+                            <h3 className="font-extrabold text-sm text-[#171717] dark:text-white group-hover:text-[#E85D2A] transition-colors leading-snug line-clamp-2">
                               {groupKey}
                             </h3>
                             {!isExpanded && (
-                              <p className="text-[10px] sm:text-[11px] text-[#78716C] mt-1 line-clamp-2 leading-relaxed">
+                              <p className="text-[10px] sm:text-[11px] text-[#78716C] dark:text-[#A8A29E] mt-1 line-clamp-2 leading-relaxed">
                                 {selectedVariant.description || 'Freshly prepared to order.'}
                               </p>
                             )}
@@ -1489,9 +1565,9 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
                           {/* ── COLLAPSED STATE ── */}
                           {!isExpanded && (
-                            <div className="flex items-end justify-between mt-3 pt-2.5 border-t border-[#F5F5F4]">
+                            <div className="flex items-end justify-between mt-3 pt-2.5 border-t border-[#F5F5F4] dark:border-[#333]">
                               <div>
-                                <span className="text-[10px] text-[#78716C] font-semibold block">
+                                <span className="text-[10px] text-[#78716C] dark:text-[#A8A29E] font-semibold block">
                                   {variants.length > 1 ? variants.map((v) => v.unit).join(' / ') : (selectedVariant.unit || '')}
                                 </span>
                                 <span className="text-base font-black text-[#E85D2A] leading-none">
@@ -1521,7 +1597,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                               {/* Variant selector */}
                               {variants.length > 1 && (
                                 <div>
-                                  <p className="text-[10px] font-extrabold text-[#78716C] uppercase tracking-wider mb-2">Choose Portion</p>
+                                  <p className="text-[10px] font-extrabold text-[#78716C] dark:text-[#A8A29E] uppercase tracking-wider mb-2">Choose Portion</p>
                                   <div className="grid grid-cols-2 gap-1.5">
                                     {variants.map((v) => (
                                       <button
@@ -1530,7 +1606,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                                         className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border-2 flex flex-col items-start gap-0.5 ${
                                           selectedVariant.id === v.id
                                             ? 'bg-[#E85D2A] text-white border-[#E85D2A] shadow-md'
-                                            : 'bg-[#FAF9F7] text-[#171717] border-[#E7E5E4] hover:border-[#E85D2A]/50'
+                                            : 'bg-[#FAF9F7] dark:bg-[#333] text-[#171717] dark:text-[#E5E5E5] border-[#E7E5E4] dark:border-[#404040] hover:border-[#E85D2A]/50'
                                         }`}
                                       >
                                         <span className="text-[11px]">{v.unit}</span>
@@ -1545,53 +1621,55 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
                               {/* Single variant price pill */}
                               {variants.length === 1 && (
-                                <div className="flex justify-between items-center px-3 py-2 bg-[#FAF9F7] rounded-xl border border-[#E7E5E4]">
-                                  <span className="text-xs font-bold text-[#171717]">{selectedVariant.unit}</span>
+                                <div className="flex justify-between items-center px-3 py-2 bg-[#FAF9F7] dark:bg-[#333] rounded-xl border border-[#E7E5E4] dark:border-[#404040]">
+                                  <span className="text-xs font-bold text-[#171717] dark:text-[#E5E5E5]">{selectedVariant.unit}</span>
                                   <span className="text-sm font-black text-[#E85D2A]">Rs. {selectedVariant.price}</span>
                                 </div>
                               )}
 
-                              {/* Quantity stepper */}
+                              {/* Quantity stepper — keyed by selectedVariant.id for independent per-variant qty */}
                               <div>
-                                <p className="text-[10px] font-extrabold text-[#78716C] uppercase tracking-wider mb-2">Quantity</p>
-                                <div className="flex items-center bg-[#FAF9F7] border border-[#E7E5E4] rounded-xl p-1.5 gap-3 w-fit">
+                                <p className="text-[10px] font-extrabold text-[#78716C] dark:text-[#A8A29E] uppercase tracking-wider mb-2">
+                                  Quantity{variants.length > 1 ? ` — ${selectedVariant.unit}` : ''}
+                                </p>
+                                <div className="flex items-center gap-0 bg-[#FAF9F7] dark:bg-[#333] border border-[#E7E5E4] dark:border-[#404040] rounded-xl overflow-hidden w-fit">
                                   <button
-                                    onClick={() => setPendingQty((prev) => ({ ...prev, [groupKey]: Math.max(1, (prev[groupKey] || 1) - 1) }))}
-                                    className="w-8 h-8 bg-white border border-[#E7E5E4] text-[#E85D2A] font-black rounded-lg flex items-center justify-center hover:bg-rose-50 hover:text-rose-500 transition-all cursor-pointer shadow-xs"
+                                    onClick={() => setPendingQty((prev) => ({ ...prev, [selectedVariant.id]: Math.max(1, (prev[selectedVariant.id] || 1) - 1) }))}
+                                    disabled={currentVariantQty <= 1}
+                                    className="w-11 h-11 flex items-center justify-center text-[#78716C] dark:text-[#A8A29E] hover:bg-[#E7E5E4] dark:hover:bg-[#404040] disabled:opacity-35 disabled:cursor-not-allowed transition-all cursor-pointer border-r border-[#E7E5E4] dark:border-[#404040]"
                                   >
-                                    <Minus className="w-3.5 h-3.5" />
+                                    <Minus className="w-4 h-4" />
                                   </button>
-                                  <span className="text-sm font-black text-[#171717] w-6 text-center">{qty}</span>
+                                  <span className="text-base font-black text-[#171717] dark:text-white w-14 text-center select-none">{currentVariantQty}</span>
                                   <button
-                                    onClick={() => setPendingQty((prev) => ({ ...prev, [groupKey]: (prev[groupKey] || 1) + 1 }))}
-                                    className="w-8 h-8 bg-[#E85D2A] text-white font-black rounded-lg flex items-center justify-center hover:bg-[#D94E1B] transition-all cursor-pointer shadow-xs"
+                                    onClick={() => setPendingQty((prev) => ({ ...prev, [selectedVariant.id]: (prev[selectedVariant.id] || 1) + 1 }))}
+                                    className="w-11 h-11 flex items-center justify-center text-[#78716C] dark:text-[#A8A29E] hover:bg-[#E7E5E4] dark:hover:bg-[#404040] transition-all cursor-pointer border-l border-[#E7E5E4] dark:border-[#404040]"
                                   >
-                                    <Plus className="w-3.5 h-3.5" />
+                                    <Plus className="w-4 h-4" />
                                   </button>
                                 </div>
                               </div>
 
                               {/* Price preview */}
-                              <div className="flex items-center justify-between py-2 border-t border-[#F5F5F4]">
-                                <span className="text-[11px] text-[#78716C] font-semibold">
-                                  {qty} × Rs. {selectedVariant.price}
-                                </span>
-                                <span className="text-base font-black text-[#E85D2A]">
-                                  Rs. {(selectedVariant.price * qty).toFixed(0)}
+                              <div className="bg-[#FAF9F7] dark:bg-[#262626] border border-[#E7E5E4] dark:border-[#333] p-2.5 rounded-xl flex items-center justify-between">
+                                <span className="text-[11px] font-extrabold text-[#78716C] dark:text-[#A8A29E]">Subtotal:</span>
+                                <span className="text-sm font-black text-[#E85D2A]">
+                                  Rs. {(selectedVariant.price * currentVariantQty).toLocaleString()}
                                 </span>
                               </div>
 
                               {/* Action buttons */}
-                              <div className="flex gap-2">
+                              <div className="flex gap-2 pt-0.5">
                                 <button
                                   onClick={() => setExpandedGroup(null)}
-                                  className="flex-1 py-2.5 bg-[#FAF9F7] hover:bg-[#E7E5E4] text-[#78716C] font-bold text-xs rounded-xl transition-all cursor-pointer border border-[#E7E5E4]"
+                                  className="flex-1 py-3 bg-[#FAF9F7] dark:bg-[#333] hover:bg-[#E7E5E4] dark:hover:bg-[#404040] text-[#78716C] dark:text-[#A8A29E] font-bold text-xs rounded-xl transition-all cursor-pointer border border-[#E7E5E4] dark:border-[#404040]"
                                 >
                                   Cancel
                                 </button>
                                 <button
-                                  onClick={() => handleAddWithVariantAndQty(selectedVariant, qty, groupKey)}
-                                  className="flex-[2] py-2.5 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-95 text-white font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#E85D2A]/20 cursor-pointer flex items-center justify-center gap-1.5"
+                                  disabled={isSelectedOutOfStock}
+                                  onClick={() => handleAddWithVariantAndQty(selectedVariant, groupKey)}
+                                  className="flex-[2] py-3 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold text-xs rounded-xl transition-all shadow-lg shadow-[#E85D2A]/20 cursor-pointer flex items-center justify-center gap-1.5"
                                 >
                                   <CartIcon className="w-3.5 h-3.5" />
                                   <span>Add to Cart</span>
@@ -1610,26 +1688,34 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
         )}
       </main>
 
-      {/* STICKY CART FOOTER BAR (Preserved Sticky Behavior & Badge) */}
+      {/* STICKY CART FOOTER BAR — Ultra Clean & Compact */}
       {totalCartQuantity > 0 && isSessionVerified && (
-        <div className="sticky bottom-4 z-40 max-w-2xl mx-auto px-4 w-full animate-slide-up">
-          <div className="bg-[#171717] text-white p-4 rounded-3xl shadow-2xl flex items-center justify-between border border-slate-700/50 backdrop-blur-lg">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#E85D2A] text-white flex items-center justify-center font-black text-sm shadow-md">
+        <div className="sticky bottom-4 z-40 max-w-lg sm:max-w-xl mx-auto px-3 sm:px-4 w-full animate-slide-up">
+          <div className="bg-[#171717]/95 dark:bg-[#1E1E1E]/95 text-white p-3 sm:p-3.5 rounded-2xl sm:rounded-3xl shadow-2xl flex items-center justify-between border border-white/10 backdrop-blur-xl ring-1 ring-black/5 gap-2">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              {/* Quantity Circle */}
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-[#E85D2A] text-white flex items-center justify-center font-black text-xs sm:text-sm shadow-md shadow-[#E85D2A]/30 shrink-0">
                 {totalCartQuantity}
               </div>
-              <div>
-                <strong className="text-xs font-bold block">Cart Subtotal</strong>
-                <span className="text-sm font-black text-emerald-400 font-mono">Rs. {totalCartPrice.toFixed(2)}</span>
+              {/* Subtotal Label + Price in 1 Line */}
+              <div className="min-w-0">
+                <span className="text-[10px] sm:text-[11px] font-bold text-[#A8A29E] block uppercase tracking-wider whitespace-nowrap leading-none mb-1">
+                  Cart Subtotal
+                </span>
+                <span className="text-sm sm:text-base font-black text-white font-mono whitespace-nowrap leading-none flex items-baseline gap-1">
+                  <span className="text-[#E85D2A] text-xs font-bold font-sans">Rs.</span>
+                  <span>{totalCartPrice.toFixed(2)}</span>
+                </span>
               </div>
             </div>
 
+            {/* Action Button */}
             <button
               onClick={() => navigate('/customer/cart')}
-              className="px-5 py-2.5 bg-[#E85D2A] hover:bg-[#D94E1B] text-white font-extrabold text-xs rounded-2xl shadow-lg transition-all flex items-center space-x-2 cursor-pointer"
+              className="px-4 py-2.5 sm:px-5 sm:py-3 bg-[#E85D2A] hover:bg-[#D94E1B] active:scale-95 text-white font-extrabold text-xs sm:text-sm rounded-xl sm:rounded-2xl shadow-lg shadow-[#E85D2A]/25 transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer"
             >
               <span>View Cart &amp; Checkout</span>
-              <ArrowRight className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4 shrink-0" />
             </button>
           </div>
         </div>

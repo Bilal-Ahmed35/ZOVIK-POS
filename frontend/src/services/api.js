@@ -1,9 +1,15 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5001/api';
+const getApiBase = () => {
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname;
+    return `http://${host}:5001/api`;
+  }
+  return 'http://localhost:5001/api';
+};
 
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: getApiBase(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -21,7 +27,7 @@ export const getActiveAuthToken = () => {
       if (adminSessionToken) return adminSessionToken;
       const adminLocalToken = typeof localStorage !== 'undefined' ? localStorage.getItem('admin_token') : null;
       if (adminLocalToken) return adminLocalToken;
-    } else if (path.startsWith('/cashier')) {
+    } else if (path.startsWith('/cashier') || path.startsWith('/vendor')) {
       const vendorSessionToken = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('vendor_token') : null;
       if (vendorSessionToken) return vendorSessionToken;
       const vendorLocalToken = typeof localStorage !== 'undefined' ? localStorage.getItem('vendor_token') : null;
@@ -62,7 +68,7 @@ export const getActiveRefreshToken = () => {
       if (adminSessionRefresh) return adminSessionRefresh;
       const adminLocalRefresh = typeof localStorage !== 'undefined' ? localStorage.getItem('admin_refreshToken') : null;
       if (adminLocalRefresh) return adminLocalRefresh;
-    } else if (path.startsWith('/cashier')) {
+    } else if (path.startsWith('/cashier') || path.startsWith('/vendor')) {
       const vendorSessionRefresh = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('vendor_refreshToken') : null;
       if (vendorSessionRefresh) return vendorSessionRefresh;
       const vendorLocalRefresh = typeof localStorage !== 'undefined' ? localStorage.getItem('vendor_refreshToken') : null;
@@ -99,7 +105,7 @@ export const setActiveAuthTokens = (accessToken, refreshToken) => {
   const path = typeof window !== 'undefined' && window.location ? window.location.pathname || '' : '';
   let rolePrefix = '';
   if (path.startsWith('/admin')) rolePrefix = 'admin_';
-  else if (path.startsWith('/cashier')) rolePrefix = 'vendor_';
+  else if (path.startsWith('/cashier') || path.startsWith('/vendor')) rolePrefix = 'vendor_';
   else if (path.startsWith('/kitchen')) rolePrefix = 'kitchen_';
   else if (path.startsWith('/customer')) rolePrefix = 'customer_';
 

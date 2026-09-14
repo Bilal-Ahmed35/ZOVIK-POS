@@ -40,7 +40,8 @@ const resolveImageUrl = (url) => {
   if (!url || typeof url !== 'string' || url.trim() === '') return null;
   const trimmed = url.trim();
   if (trimmed.startsWith('/uploads/')) {
-    return `http://localhost:5001${trimmed}`;
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+    return `http://${host}:5001${trimmed}`;
   }
   return trimmed;
 };
@@ -48,24 +49,59 @@ const resolveImageUrl = (url) => {
 const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL', 'AVAILABLE', 'LOW_STOCK', 'DISABLED'
   const [showItemModal, setShowItemModal] = useState(false);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
   const [saving, setSaving] = useState(false);
 
   const fileInputRef = useRef(null);
 
-  // Group items by groupName or name
+  // Status Metrics
+  const metrics = useMemo(() => {
+    const total = inventory.length;
+    const available = inventory.filter((i) => i.isAvailable !== false && i.isActive !== false).length;
+    const lowStock = inventory.filter((i) => (i.stock ?? 50) <= 10 && (i.stock ?? 50) > 0).length;
+    const disabled = inventory.filter((i) => i.isAvailable === false || i.isActive === false || (i.stock ?? 50) <= 0).length;
+    return { total, available, lowStock, disabled };
+  }, [inventory]);
+
+  // Group items by groupName or name and apply filters
   const filteredItems = useMemo(() => {
     return inventory.filter((item) => {
+      // 1. Category Filter
       const matchesCat = selectedCategory === 'ALL' || item.category === selectedCategory;
-      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCat && matchesSearch;
+
+      // 2. Search Filter
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch =
+        !searchTerm ||
+        item.name.toLowerCase().includes(searchLower) ||
+        (item.groupName && item.groupName.toLowerCase().includes(searchLower)) ||
+        (item.description && item.description.toLowerCase().includes(searchLower));
+
+      // 3. Status Filter
+      const isAvailable = item.isAvailable !== false && item.isActive !== false;
+      const isLowStock = (item.stock ?? 50) <= 10 && (item.stock ?? 50) > 0;
+      const isDisabled = !isAvailable || (item.stock ?? 50) <= 0;
+
+      let matchesStatus = true;
+      if (statusFilter === 'AVAILABLE') matchesStatus = isAvailable;
+      else if (statusFilter === 'LOW_STOCK') matchesStatus = isLowStock;
+      else if (statusFilter === 'DISABLED') matchesStatus = isDisabled;
+
+      return matchesCat && matchesSearch && matchesStatus;
     });
-  }, [inventory, selectedCategory, searchTerm]);
+  }, [inventory, selectedCategory, searchTerm, statusFilter]);
 
   const categories = useMemo(() => {
-    const cats = new Set(inventory.map((item) => item.category || 'General'));
-    return ['ALL', ...Array.from(cats)];
+    const defaultCats = ['ALL', 'Lunch', 'Breakfast', 'Fast Food', 'Refreshment'];
+    const customCats = new Set();
+    inventory.forEach((item) => {
+      if (item.category && !defaultCats.includes(item.category)) {
+        customCats.add(item.category);
+      }
+    });
+    return [...defaultCats, ...Array.from(customCats)];
   }, [inventory]);
 
   const existingGroups = useMemo(() => {
@@ -352,6 +388,27 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
     }
   };
 
+  const handleToggleGroupAvailability = async (variantsList) => {
+    try {
+      const anyActive = variantsList.some((v) => v.isAvailable !== false && v.isActive !== false);
+      const targetState = !anyActive;
+
+      const promises = variantsList.map((v) =>
+        api.put(`/menu/${v.id}`, { isActive: targetState })
+      );
+      await Promise.all(promises);
+
+      const groupName = variantsList[0]?.groupName || variantsList[0]?.name || 'Item';
+      if (showToast) {
+        showToast(`"${groupName}" set to ${targetState ? 'Available' : 'Unavailable'}!`);
+      }
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Toggle group availability error:', err);
+      if (showToast) showToast('Failed to update group availability', 'error');
+    }
+  };
+
   const handleDeleteItem = async () => {
     if (!deleteConfirmItem) return;
     try {
@@ -383,33 +440,62 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
         </button>
       </div>
 
-      {/* Category Pills & Search */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4">
-        {/* Category Filter Pills */}
-        <div className="flex items-center overflow-x-auto p-1 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl gap-1 custom-scrollbar">
+      {/* SEARCH BAR & CATEGORY / STOCK FILTERS STRIP */}
+      <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-4 rounded-2xl space-y-3.5 shadow-xl">
+        <div className="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
+          {/* Search Bar Input */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search menu item name (e.g. Biryani, Burger)..."
+              className="w-full pl-10 pr-4 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-colors font-medium"
+            />
+          </div>
+
+          {/* Stock / Status Quick Filters */}
+          <div className="flex items-center space-x-1.5 bg-[var(--bg-color)] p-1 rounded-xl border border-[var(--border-color)] overflow-x-auto custom-scrollbar">
+            {[
+              { id: 'ALL', label: `All Items (${metrics.total})` },
+              { id: 'AVAILABLE', label: `Available (${metrics.available})` },
+              { id: 'LOW_STOCK', label: `Low Stock (${metrics.lowStock})` },
+              { id: 'DISABLED', label: `Disabled (${metrics.disabled})` },
+            ].map((flt) => (
+              <button
+                key={flt.id}
+                onClick={() => setStatusFilter(flt.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
+                  statusFilter === flt.id
+                    ? 'bg-orange-600 text-white shadow-sm'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+                }`}
+              >
+                {flt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Category Pills */}
+        <div className="flex items-center space-x-1.5 overflow-x-auto pt-1 custom-scrollbar">
+          <span className="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-wider mr-1 shrink-0">
+            Categories:
+          </span>
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
-                selectedCategory === cat ? 'bg-orange-600 text-white shadow-md' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
+              className={`px-3 py-1 rounded-full text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer border ${
+                selectedCategory === cat
+                  ? 'bg-orange-500/20 text-orange-500 border-orange-500/40 shadow-sm'
+                  : 'bg-[var(--bg-color)] text-[var(--text-muted)] border-[var(--border-color)] hover:text-[var(--text-main)]'
               }`}
             >
               {cat}
             </button>
           ))}
-        </div>
-
-        {/* Search Bar */}
-        <div className="relative flex-1 sm:max-w-xs">
-          <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search menu item name..."
-            className="w-full pl-10 pr-4 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-colors"
-          />
         </div>
       </div>
 
@@ -465,12 +551,33 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
 
               {/* Card Body */}
               <div className="p-5 space-y-3 flex-1 flex flex-col">
-                {/* Group Name & Description */}
-                <div>
-                  <h3 className="text-base font-extrabold text-[var(--text-main)]">{groupKey}</h3>
-                  <p className="text-xs text-[var(--text-muted)] line-clamp-2 mt-0.5">
-                    {primaryItem.description || 'Freshly prepared daily with quality ingredients.'}
-                  </p>
+                {/* Group Name & Description + Main Dish Availability Pill Toggle */}
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-extrabold text-[var(--text-main)] truncate">{groupKey}</h3>
+                      <p className="text-xs text-[var(--text-muted)] line-clamp-2 mt-0.5">
+                        {primaryItem.description || 'Freshly prepared daily with quality ingredients.'}
+                      </p>
+                    </div>
+
+                    {/* Main Dish-Level Availability Pill Toggle Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleGroupAvailability(variants)}
+                      className={`px-3 py-1 rounded-full text-xs font-extrabold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm border shrink-0 ${
+                        allActive
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'
+                          : someActive
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25'
+                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/25'
+                      }`}
+                      title="Click to toggle availability of entire dish & all portions"
+                    >
+                      <span className={`w-2 h-2 rounded-full ${allActive ? 'bg-emerald-500 animate-pulse' : someActive ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                      <span>{allActive ? 'Available' : someActive ? 'Partial' : 'Unavailable'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Prep Time & Stock of primary */}
@@ -516,25 +623,24 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                           <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-md text-[10px] font-bold shrink-0">
                             {v.unit || '1 No.'}
                           </span>
-                          <span className="text-sm font-mono font-extrabold text-emerald-400 shrink-0">
+                          <span className="text-sm font-mono font-extrabold text-[var(--text-main)] shrink-0">
                             Rs. {v.price?.toFixed(0)}
                           </span>
-                          {!isVActive && (
-                            <span className="text-[9px] font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">OFF</span>
-                          )}
                         </div>
                         {/* Right: Actions */}
-                        <div className="flex items-center space-x-1 shrink-0 ml-2">
+                        <div className="flex items-center space-x-1.5 shrink-0 ml-2">
                           <button
+                            type="button"
                             onClick={() => handleToggleAvailability(v)}
-                            className={`p-1.5 rounded-lg transition-all cursor-pointer ${
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center space-x-1 transition-all cursor-pointer border ${
                               isVActive
-                                ? 'text-emerald-400 hover:bg-emerald-500/10'
-                                : 'text-rose-400 hover:bg-rose-500/10'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
                             }`}
-                            title={isVActive ? 'Disable' : 'Enable'}
+                            title={isVActive ? 'Mark portion unavailable' : 'Mark portion available'}
                           >
-                            {isVActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                            <span className={`w-1.5 h-1.5 rounded-full ${isVActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                            <span>{isVActive ? 'Available' : 'Unavailable'}</span>
                           </button>
                           <button
                             onClick={() => handleOpenEditSingleVariant(v)}

@@ -2,10 +2,15 @@ import { io } from 'socket.io-client';
 
 let currentUser = null;
 
-const SOCKET_URL = 'http://localhost:5001';
+const getSocketUrl = () => {
+  if (typeof window !== 'undefined' && window.location) {
+    return `http://${window.location.hostname}:5001`;
+  }
+  return 'http://localhost:5001';
+};
 
 // Create a single persistent socket instance so event listeners are preserved
-export const socket = io(SOCKET_URL, {
+export const socket = io(getSocketUrl(), {
   autoConnect: true,
   transports: ['websocket', 'polling'],
   reconnection: true,

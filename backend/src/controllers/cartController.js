@@ -164,10 +164,14 @@ const updateCartItem = async (req, res) => {
 
   try {
     const cart = await getOrCreateCart(sessionId);
+    const parsedId = parseInt(itemId, 10);
     const cartItem = await prisma.cartItem.findFirst({
       where: {
-        id: parseInt(itemId, 10),
         cartId: cart.id,
+        OR: [
+          { id: parsedId },
+          { menuItemId: parsedId },
+        ],
       },
       include: { menuItem: true },
     });
@@ -213,10 +217,14 @@ const removeCartItem = async (req, res) => {
 
   try {
     const cart = await getOrCreateCart(sessionId);
+    const parsedId = parseInt(itemId, 10);
     await prisma.cartItem.deleteMany({
       where: {
-        id: parseInt(itemId, 10),
         cartId: cart.id,
+        OR: [
+          { id: parsedId },
+          { menuItemId: parsedId },
+        ],
       },
     });
 

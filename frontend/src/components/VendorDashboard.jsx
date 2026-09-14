@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../services/api';
 import { getSocket } from '../services/socket';
+import AdminMenuView from './admin/views/AdminMenuView';
 import {
   Check,
   X,
@@ -238,7 +239,11 @@ const VendorDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const [pendingVerifyingIds, setPendingVerifyingIds] = useState(new Set());
+
   const handleVerifyPayment = async (orderId) => {
+    if (pendingVerifyingIds.has(orderId)) return;
+    setPendingVerifyingIds((prev) => new Set(prev).add(orderId));
     setError('');
     try {
       const response = await api.put(`/payments/${orderId}/verify`, { approve: true });
@@ -250,10 +255,18 @@ const VendorDashboard = ({ user, onLogout }) => {
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || 'Failed to verify payment.');
+    } finally {
+      setPendingVerifyingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
   };
 
   const handleRejectPayment = async (orderId) => {
+    if (pendingVerifyingIds.has(orderId)) return;
+    setPendingVerifyingIds((prev) => new Set(prev).add(orderId));
     setError('');
     try {
       const response = await api.put(`/payments/${orderId}/verify`, {
@@ -268,6 +281,12 @@ const VendorDashboard = ({ user, onLogout }) => {
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || 'Failed to reject payment.');
+    } finally {
+      setPendingVerifyingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
   };
 
@@ -845,14 +864,15 @@ const VendorDashboard = ({ user, onLogout }) => {
                   </div>
 
                   <div className="flex space-x-3 pt-2">
-                    {order.status === 'PAID' && (
+                    {/* Send to Kitchen button commented out as orders flow automatically to kitchen */}
+                    {/* {order.status === 'PAID' && (
                       <button
                         onClick={() => handleUpdateStatus(order.id, 'PREPARING')}
                         className="w-full py-2.5 bg-orange-600/20 hover:bg-orange-600/30 border border-orange-500/30 text-orange-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
                       >
                         Send to Kitchen →
                       </button>
-                    )}
+                    )} */}
                     {order.status === 'READY' && (
                       <button
                         onClick={() => handleUpdateStatus(order.id, 'COMPLETED')}
@@ -868,219 +888,9 @@ const VendorDashboard = ({ user, onLogout }) => {
           </div>
         )}
 
-        {/* ── TAB 3: MENU AVAILABILITY (SEARCH & CATEGORIES UPGRADE) ──────────── */}
+        {/* ── TAB 3: MENU AVAILABILITY (SHARED ENHANCED ADMIN MENU VIEW) ──────────── */}
         {activeTab === 'menu' && (
-          <div className="space-y-5">
-            {/* Header with Search, Refresh, Hotkey Tip & Add Button */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[var(--card-bg)] border border-[var(--border-color)] p-5 rounded-2xl shadow-xl">
-              <div className="flex items-center space-x-3">
-                <h2 className="font-black text-xl text-[var(--text-main)] font-display">Menu Catalog</h2>
-                <button
-                  onClick={() => {
-                    fetchMenu();
-                    showToast('Menu catalog refreshed!');
-                  }}
-                  className="p-2 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-white/[0.08] rounded-xl border border-[var(--border-color)] transition-all cursor-pointer"
-                  title="Refresh Menu Catalog (Press R)"
-                >
-                  <RefreshCw className="w-4 h-4 text-orange-400" />
-                </button>
-                <span className="text-[10px] text-[var(--text-muted)] font-mono hidden sm:inline-block bg-[var(--bg-color)] px-2 py-1 rounded border border-[var(--border-color)]">
-                  Hotkey [R] to Refresh
-                </span>
-              </div>
-
-              <div className="flex items-center space-x-3 w-full md:w-auto">
-                <button
-                  onClick={handleOpenAddModal}
-                  className="w-full md:w-auto px-4 py-2.5 bg-[var(--sb-primary)] hover:bg-[var(--sb-primary-hover)] text-white rounded-xl text-xs font-extrabold shadow-md transition-all cursor-pointer flex items-center justify-center space-x-1.5"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>+ Add New Item</span>
-                </button>
-              </div>
-            </div>
-
-            {/* SEARCH BAR & CATEGORY / STOCK FILTERS STRIP */}
-            <div className="bg-[var(--card-bg)] border border-[var(--border-color)] p-4 rounded-2xl space-y-3.5 shadow-xl">
-              <div className="flex flex-col sm:flex-row justify-between gap-3">
-                {/* Search Bar Input */}
-                <div className="relative flex-1">
-                  <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3" />
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search menu item name (e.g. Biryani, Burger)..."
-                    className="w-full pl-10 pr-4 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-[var(--sb-primary)] transition-colors"
-                  />
-                </div>
-
-                {/* Stock Warning Quick Filters */}
-                <div className="flex items-center space-x-1.5 bg-[var(--bg-color)] p-1 rounded-xl border border-[var(--border-color)] overflow-x-auto">
-                  {[
-                    { id: 'ALL', label: 'All Items' },
-                    { id: 'AVAILABLE', label: 'Available' },
-                    { id: 'LOW_STOCK', label: `Low Stock (${metrics.lowStockCount})` },
-                    { id: 'DISABLED', label: `Disabled (${metrics.outOfStockCount})` },
-                  ].map((flt) => (
-                    <button
-                      key={flt.id}
-                      onClick={() => setStockFilter(flt.id)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-extrabold whitespace-nowrap transition-all cursor-pointer ${
-                        stockFilter === flt.id
-                          ? 'bg-[var(--sb-primary)] text-white shadow-sm'
-                          : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
-                      }`}
-                    >
-                      {flt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Category Pills */}
-              <div className="flex items-center space-x-1.5 overflow-x-auto pt-1 custom-scrollbar">
-                {categories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`px-3 py-1 rounded-lg text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer ${
-                      selectedCategory === cat
-                        ? 'bg-white/10 text-orange-400 border border-orange-500/30'
-                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--card-bg)]'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Menu Catalog Product Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {filteredMenuItems.length === 0 ? (
-                <div className="col-span-full py-16 text-center bg-[var(--card-bg)]/60 border border-[var(--border-color)] border-dashed rounded-3xl">
-                  <Utensils className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                  <p className="text-sm font-bold text-[var(--text-main)]">No Matching Menu Items</p>
-                  <p className="text-xs text-[var(--text-muted)] mt-1 max-w-sm mx-auto">
-                    Try adjusting your search criteria or category filters.
-                  </p>
-                </div>
-              ) : (
-                filteredMenuItems.map((item) => {
-                  const isAvailable = item.isActive !== false;
-                  const isLowStock = (item.stock ?? 50) <= 5 && (item.stock ?? 50) > 0;
-                  const isOutOfStock = (item.stock ?? 50) <= 0;
-
-                  return (
-                    <div
-                      key={item.id}
-                      className={`bg-[var(--card-bg)] border rounded-2xl p-4 flex flex-col justify-between space-y-3.5 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-2xl ${
-                        isAvailable
-                          ? 'border-[var(--border-color)] hover:border-[var(--sb-primary)]/40'
-                          : 'border-rose-500/30 opacity-70'
-                      }`}
-                    >
-                      {/* Product Image Area (16:9 aspect ratio) */}
-                      <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-[var(--bg-color)] border border-[var(--border-color)]">
-                        {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-[var(--text-muted)] text-xs font-semibold space-y-1">
-                            <Utensils className="w-5 h-5 opacity-40 text-[var(--text-muted)]" />
-                            <span className="text-[10px] text-[var(--text-muted)]">Fallback Image</span>
-                          </div>
-                        )}
-
-                        {/* Category Badge Overlay */}
-                        <span className="absolute top-2.5 left-2.5 px-2.5 py-0.5 bg-black/70 backdrop-blur-md text-[var(--text-main)] border border-white/10 rounded text-[9px] font-black uppercase tracking-wider">
-                          {item.category || 'GENERAL'}
-                        </span>
-
-                        {/* Stock Alert Badge Overlay */}
-                        {isOutOfStock ? (
-                          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 bg-rose-600/90 backdrop-blur-md text-white rounded text-[9px] font-black uppercase tracking-wider shadow-md">
-                            OUT OF STOCK
-                          </span>
-                        ) : isLowStock ? (
-                          <span className="absolute top-2.5 right-2.5 px-2 py-0.5 bg-amber-500/90 backdrop-blur-md text-black rounded text-[9px] font-black uppercase tracking-wider shadow-md">
-                            LOW STOCK ({item.stock})
-                          </span>
-                        ) : null}
-                      </div>
-
-                      {/* Product Details & Price */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-start">
-                          <h3 className="font-extrabold text-sm text-[var(--text-main)] line-clamp-1">{item.name}</h3>
-                        </div>
-
-                        {item.description && (
-                          <p className="text-[11px] text-[var(--text-muted)] line-clamp-1 font-normal">
-                            {item.description}
-                          </p>
-                        )}
-
-                        <div className="flex justify-between items-center pt-1">
-                          <span className="text-base font-extrabold text-emerald-400 font-mono">
-                            Rs. {item.price?.toFixed(2)}
-                          </span>
-                          <span
-                            className={`text-[11px] font-bold ${
-                              isOutOfStock
-                                ? 'text-rose-400 font-extrabold'
-                                : isLowStock
-                                ? 'text-amber-400 font-extrabold'
-                                : 'text-[var(--text-muted)]'
-                            }`}
-                          >
-                            Stock: <strong className="text-[var(--text-main)]">{item.stock ?? 50}</strong>
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Availability Toggle & Actions */}
-                      <div className="pt-2 border-t border-[var(--border-color)] flex items-center justify-between gap-2 text-xs">
-                        {/* Availability Toggle Status */}
-                        <button
-                          onClick={() => handleToggleMenu(item.id, isAvailable)}
-                          className={`px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer flex items-center space-x-1.5 ${
-                            isAvailable
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
-                              : 'bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25'
-                          }`}
-                          title={isAvailable ? 'Click to Disable Item' : 'Click to Enable Item'}
-                        >
-                          <span className={`w-2 h-2 rounded-full ${isAvailable ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                          <span>{isAvailable ? 'Available' : 'Disabled'}</span>
-                        </button>
-
-                        {/* Edit & Delete Action Controls */}
-                        <div className="flex items-center space-x-1.5">
-                          <button
-                            onClick={() => handleOpenEditModal(item)}
-                            className="px-3 py-1.5 bg-[var(--card-bg)] hover:bg-white/[0.12] text-[var(--text-main)] border border-[var(--border-color)] rounded-xl font-bold text-[11px] transition-all cursor-pointer flex items-center space-x-1"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                            <span>Edit</span>
-                          </button>
-
-                          <button
-                            onClick={() => setDeleteConfirmItem(item)}
-                            className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-xl font-bold text-xs transition-all cursor-pointer"
-                            title="Delete Item"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
+          <AdminMenuView inventory={menu} onRefresh={fetchMenu} showToast={showToast} />
         )}
       </div>
 

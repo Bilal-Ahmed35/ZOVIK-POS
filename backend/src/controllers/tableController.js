@@ -163,9 +163,22 @@ const regenerateTableQR = async (req, res) => {
       req,
     });
 
+    const baseUrl = getDynamicBaseUrl(req);
+    const tableUrl = `${baseUrl.replace(/\/$/, '')}/customer/table/${encodeURIComponent(newQrToken)}`;
+    const qrDataUrl = await QRCode.toDataURL(tableUrl, {
+      errorCorrectionLevel: 'H',
+      margin: 2,
+      width: 320,
+      color: { dark: '#1e1b4b', light: '#ffffff' },
+    });
+
     return res.json({
       message: `Cryptographic QR token regenerated for ${table.tableNumber}. Old printed QR is now invalidated.`,
-      table: updated,
+      table: {
+        ...updated,
+        url: tableUrl,
+        qrDataUrl,
+      },
     });
   } catch (error) {
     console.error('Regenerate QR error:', error);
@@ -176,9 +189,21 @@ const regenerateTableQR = async (req, res) => {
 /**
  * Generate high-res printable table QR stand card
  */
+/**
+ * Helper to get dynamic base URL from request, headers, or incoming client host (never hardcoded)
+ */
+const getDynamicBaseUrl = (req) => {
+  if (req.query.baseUrl) {
+    return req.query.baseUrl.replace(/\/$/, '');
+  }
+  let host = req.headers['x-forwarded-host'] || req.headers.host || req.hostname || 'localhost';
+  host = host.split(':')[0];
+  return `http://${host}:5173`;
+};
+
 const getTableQRCard = async (req, res) => {
   const { id } = req.params;
-  const baseUrl = req.query.baseUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const baseUrl = getDynamicBaseUrl(req);
 
   try {
     const table = await prisma.table.findUnique({
@@ -220,7 +245,7 @@ const getTableQRCard = async (req, res) => {
  * Generate Batch QR cards for all active tables
  */
 const getBatchTableQRCards = async (req, res) => {
-  const baseUrl = req.query.baseUrl || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const baseUrl = getDynamicBaseUrl(req);
 
   try {
     const tables = await prisma.table.findMany({

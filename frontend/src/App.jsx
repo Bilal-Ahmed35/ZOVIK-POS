@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import StaffLogin from './components/StaffLogin';
+import { Routes, Route, Navigate, useNavigate, useLocation, Link } from 'react-router-dom';
+import RoleLogin from './components/RoleLogin';
 import CustomerPortalPage from './pages/customer/CustomerPortalPage';
 import CustomerCartPage from './pages/customer/CustomerCartPage';
 import OrderTrackingPage from './pages/customer/OrderTrackingPage';
@@ -9,7 +9,7 @@ import KitchenBoardPage from './pages/kitchen/KitchenBoardPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import api, { setActiveAuthTokens } from './services/api';
 import { connectSocket, disconnectSocket } from './services/socket';
-import { Sun, Moon, LogIn } from 'lucide-react';
+import { Sun, Moon, Flame, CreditCard, ShieldCheck, User } from 'lucide-react';
 
 function App() {
   const navigate = useNavigate();
@@ -22,7 +22,7 @@ function App() {
     const path = typeof window !== 'undefined' ? window.location?.pathname || '' : '';
     let roleKey = '';
     if (path.startsWith('/admin')) roleKey = 'admin_';
-    else if (path.startsWith('/cashier')) roleKey = 'vendor_';
+    else if (path.startsWith('/cashier') || path.startsWith('/vendor')) roleKey = 'vendor_';
     else if (path.startsWith('/kitchen')) roleKey = 'kitchen_';
     else if (path.startsWith('/customer')) roleKey = 'customer_';
 
@@ -70,12 +70,14 @@ function App() {
     }
   }, []);
 
-  // Auto role session sync for development/testing demo navigation
+  // Auto role session sync for demo navigation (bypassed on login pages)
   useEffect(() => {
     const path = location.pathname;
+    if (path.includes('/login')) return;
+
     let requiredRole = null;
     if (path.startsWith('/admin')) requiredRole = 'ADMIN';
-    else if (path.startsWith('/cashier')) requiredRole = 'VENDOR';
+    else if (path.startsWith('/cashier') || path.startsWith('/vendor')) requiredRole = 'VENDOR';
     else if (path.startsWith('/kitchen')) requiredRole = 'KITCHEN';
 
     if (requiredRole && user.role !== requiredRole) {
@@ -134,6 +136,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    const activePath = location.pathname;
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.clear();
     }
@@ -166,16 +169,21 @@ function App() {
     setUser({ id: 0, role: 'CUSTOMER', name: 'Guest Customer', email: '', isGuest: true });
     disconnectSocket();
     connectSocket({ id: 0, role: 'CUSTOMER', name: 'Guest Customer', email: '', isGuest: true });
-    navigate('/login');
+
+    if (activePath.startsWith('/kitchen')) navigate('/kitchen/login');
+    else if (activePath.startsWith('/cashier') || activePath.startsWith('/vendor')) navigate('/cashier/login');
+    else if (activePath.startsWith('/admin')) navigate('/admin/login');
+    else navigate('/customer/login');
   };
 
-  // Determine if we are on a customer-facing route
+  // Determine if we are on a customer-facing or login route
   const isCustomerRoute = location.pathname.startsWith('/customer');
+  const isLoginRoute = location.pathname.includes('/login');
 
   return (
     <div className="min-h-screen bg-[var(--bg-color)] text-[var(--text-main)] flex flex-col transition-colors duration-300">
-      {/* Top Application Header – hidden on customer routes */}
-      {!isCustomerRoute && (
+      {/* Top Application Header – hidden on customer routes and login pages */}
+      {!isCustomerRoute && !isLoginRoute && (
         <div className="bg-[var(--card-bg)] border-b border-[var(--border-color)] px-6 py-3 flex justify-between items-center z-40 transition-colors duration-300 shadow-sm">
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
@@ -201,13 +209,29 @@ function App() {
             </button>
 
             {user.role === 'CUSTOMER' ? (
-              <button
-                onClick={() => navigate('/login')}
-                className="flex items-center space-x-1.5 bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded-lg font-bold transition-all shadow-md shadow-orange-600/20 cursor-pointer"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Staff Login</span>
-              </button>
+              <div className="flex items-center space-x-1.5">
+                <Link
+                  to="/kitchen/login"
+                  className="flex items-center space-x-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
+                >
+                  <Flame className="w-3.5 h-3.5" />
+                  <span>Kitchen</span>
+                </Link>
+                <Link
+                  to="/cashier/login"
+                  className="flex items-center space-x-1 bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 border border-orange-500/20 px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Cashier</span>
+                </Link>
+                <Link
+                  to="/admin/login"
+                  className="flex items-center space-x-1 bg-orange-600 hover:bg-orange-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold transition-all shadow-md shadow-orange-600/20"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Admin</span>
+                </Link>
+              </div>
             ) : (
               <button
                 onClick={handleLogout}
@@ -228,9 +252,18 @@ function App() {
           <Route path="/customer/table/:tableId" element={<CustomerPortalPage user={user} onLogout={handleLogout} />} />
           <Route path="/customer/cart" element={<CustomerCartPage user={user} onLogout={handleLogout} />} />
           <Route path="/customer/track/:trackingToken" element={<OrderTrackingPage user={user} onLogout={handleLogout} />} />
-          <Route path="/login" element={<StaffLogin onLoginSuccess={handleLoginSuccess} />} />
 
-          {/* Role-Protected Staff Dashboards */}
+          {/* The 4 Clean Portal Login Routes */}
+          <Route path="/kitchen/login" element={<RoleLogin roleType="KITCHEN" onLoginSuccess={handleLoginSuccess} />} />
+          <Route path="/cashier/login" element={<RoleLogin roleType="CASHIER" onLoginSuccess={handleLoginSuccess} />} />
+          <Route path="/admin/login" element={<RoleLogin roleType="ADMIN" onLoginSuccess={handleLoginSuccess} />} />
+          <Route path="/customer/login" element={<RoleLogin roleType="CUSTOMER" onLoginSuccess={handleLoginSuccess} />} />
+
+          {/* Redirect aliases */}
+          <Route path="/vendor/login" element={<Navigate to="/cashier/login" replace />} />
+          <Route path="/login" element={<Navigate to="/cashier/login" replace />} />
+
+          {/* Protected Staff Dashboards */}
           <Route
             path="/admin/*"
             element={
@@ -241,7 +274,7 @@ function App() {
               ) : user.role === 'ADMIN' ? (
                 <AdminDashboardPage user={user} onLogout={handleLogout} />
               ) : (
-                <Navigate to="/login" replace />
+                <Navigate to="/admin/login" replace />
               )
             }
           />
@@ -255,7 +288,21 @@ function App() {
               ) : user.role === 'VENDOR' ? (
                 <CashierPOSPage user={user} onLogout={handleLogout} />
               ) : (
-                <Navigate to="/login" replace />
+                <Navigate to="/cashier/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/vendor/*"
+            element={
+              authLoading ? (
+                <div className="min-h-screen bg-[var(--bg-color)] text-[var(--text-main)] flex items-center justify-center text-xs font-bold p-8">
+                  Authenticating Cashier Workspace...
+                </div>
+              ) : user.role === 'VENDOR' ? (
+                <CashierPOSPage user={user} onLogout={handleLogout} />
+              ) : (
+                <Navigate to="/cashier/login" replace />
               )
             }
           />
@@ -269,7 +316,7 @@ function App() {
               ) : user.role === 'KITCHEN' ? (
                 <KitchenBoardPage user={user} onLogout={handleLogout} />
               ) : (
-                <Navigate to="/login" replace />
+                <Navigate to="/kitchen/login" replace />
               )
             }
           />

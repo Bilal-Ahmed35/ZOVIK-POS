@@ -259,7 +259,8 @@ const CustomerCartPage = ({ user }) => {
     if (item?.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.trim() !== '') {
       const url = item.imageUrl.trim();
       if (url.startsWith('/uploads/')) {
-        return `http://localhost:5001${url}`;
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+        return `http://${host}:5001${url}`;
       }
       return url;
     }
@@ -381,6 +382,14 @@ const CustomerCartPage = ({ user }) => {
       if (placedOrder?.sessionId) {
         localStorage.setItem('customer_sessionId', placedOrder.sessionId);
       }
+      try {
+        const savedCache = localStorage.getItem('customer_active_orders_cache');
+        const cache = savedCache ? JSON.parse(savedCache) : { activeOrders: [], failedOrders: [] };
+        const updatedActive = [placedOrder, ...(cache.activeOrders || []).filter(o => o.id !== placedOrder.id)];
+        localStorage.setItem('customer_active_orders_cache', JSON.stringify({ ...cache, activeOrders: updatedActive }));
+      } catch (e) {
+        console.warn('Failed updating active orders cache:', e);
+      }
       setActiveOrder(placedOrder);
       clearCart();
       setShowOnlinePaymentModal(false);
@@ -395,6 +404,7 @@ const CustomerCartPage = ({ user }) => {
   };
 
   const handlePlaceOrder = async () => {
+    if (placingOrder || authorizingPayment) return;
     setError('');
     if (!otpVerified) {
       setError('Please verify your email via OTP before placing an order.');
@@ -434,51 +444,61 @@ const CustomerCartPage = ({ user }) => {
   // ─── If checkout is completed, render confirmation and track button ──────
   if (checkoutDone && activeOrder) {
     return (
-      <div className="w-full bg-[#FFFFFF] min-h-screen font-sans flex flex-col items-center justify-center p-4 sm:p-6">
-        <div className="max-w-md w-full bg-white border border-[#E7E5E4] rounded-[32px] p-8 shadow-2xl text-center space-y-6 animate-in fade-in zoom-in duration-300">
-          <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto ring-8 ring-emerald-50">
-            <CheckCircle2 className="w-10 h-10" />
+      <div className="w-full bg-[#FAF9F7] dark:bg-[#121212] min-h-screen font-sans flex flex-col items-center justify-center p-4 sm:p-6 selection:bg-[#E85D2A]/20">
+        <div className="max-w-md w-full bg-white dark:bg-[#1E1E1E] border border-[#E7E5E4] dark:border-[#333] rounded-[36px] p-8 shadow-2xl text-center space-y-6 animate-in fade-in zoom-in duration-300 relative overflow-hidden">
+          
+          {/* Top Decorative Glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-1.5 bg-gradient-to-r from-emerald-500 via-[#E85D2A] to-emerald-500 rounded-b-full" />
+
+          {/* Celebratory Checkmark Icon */}
+          <div className="relative w-20 h-20 bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto ring-8 ring-emerald-500/15 shadow-inner">
+            <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
           </div>
 
           <div>
-            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest block mb-1">
-              Order Confirmed
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 rounded-full text-[10px] font-black uppercase tracking-widest mb-2">
+              <Sparkles className="w-3 h-3 text-emerald-500" />
+              <span>Order Confirmed</span>
             </span>
-            <h1 className="text-2xl font-black text-gray-900">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#171717] dark:text-white mt-1">
               {activeOrder.orderNumber || `#000${activeOrder.id}`}
             </h1>
-            <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-              Your order has been placed successfully for <strong className="text-gray-800">{activeOrder.tableNumber || tableId}</strong>.
-              A receipt has been sent to <strong className="text-orange-600">{activeOrder.customerEmail || guestEmail}</strong>.
+            <p className="text-xs text-[#78716C] dark:text-[#A8A29E] mt-2 leading-relaxed">
+              Your order has been placed successfully for <strong className="text-[#E85D2A] font-extrabold">{activeOrder.tableNumber || tableId}</strong>.
+              A confirmation receipt has been sent to <strong className="text-[#171717] dark:text-white font-bold">{activeOrder.customerEmail || guestEmail}</strong>.
             </p>
           </div>
 
-          <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 text-xs space-y-2">
-            <div className="flex justify-between text-gray-600">
-              <span>Estimated Prep Time:</span>
-              <strong className="text-emerald-600 font-bold">~{activeOrder.etaPrediction?.adjustedEta ? Math.round(activeOrder.etaPrediction.adjustedEta) : 10} Mins</strong>
+          {/* Receipt Breakdown Card */}
+          <div className="bg-[#FAF9F7] dark:bg-[#252525] border border-[#E7E5E4] dark:border-[#3A3A3A] rounded-2xl p-4 text-xs space-y-2.5 text-left">
+            <div className="flex justify-between items-center text-[#78716C] dark:text-[#A8A29E]">
+              <span className="font-semibold">Estimated Prep Time:</span>
+              <strong className="text-emerald-600 dark:text-emerald-400 font-extrabold bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                ~{activeOrder.etaPrediction?.adjustedEta ? Math.round(activeOrder.etaPrediction.adjustedEta) : 10} Mins
+              </strong>
             </div>
-            <div className="flex justify-between text-gray-600">
-              <span>Payment:</span>
-              <strong className="text-gray-800">{activeOrder.paymentMethod} ({activeOrder.paymentStatus})</strong>
+            <div className="flex justify-between items-center text-[#78716C] dark:text-[#A8A29E]">
+              <span className="font-semibold">Payment Option:</span>
+              <strong className="text-[#171717] dark:text-white font-extrabold">{activeOrder.paymentMethod} ({activeOrder.paymentStatus})</strong>
             </div>
-            <div className="flex justify-between text-gray-900 font-black border-t border-gray-200 pt-2">
-              <span>Total Amount:</span>
-              <span className="text-orange-600">Rs. {activeOrder.total.toFixed(2)}</span>
+            <div className="flex justify-between items-center text-[#171717] dark:text-white font-black border-t border-[#E7E5E4] dark:border-[#3A3A3A] pt-2.5 text-sm">
+              <span>Total Paid:</span>
+              <span className="text-[#E85D2A] font-mono text-base">Rs. {activeOrder.total.toFixed(2)}</span>
             </div>
           </div>
 
+          {/* Action Buttons */}
           <div className="space-y-3 pt-2">
             <button
               onClick={() => navigate(`/customer/track/${activeOrder.trackingToken || activeOrder.id}`)}
-              className="w-full py-3.5 bg-orange-600 hover:bg-orange-500 text-white font-extrabold text-xs rounded-2xl shadow-lg transition-all cursor-pointer flex items-center justify-center space-x-2"
+              className="w-full py-4 bg-gradient-to-tr from-[#E85D2A] to-[#FB923C] hover:opacity-95 text-white font-extrabold text-xs rounded-2xl shadow-xl shadow-[#E85D2A]/25 transition-all cursor-pointer flex items-center justify-center space-x-2 active:scale-95"
             >
-              <QrCode className="w-4 h-4" />
+              <QrCode className="w-4.5 h-4.5" />
               <span>Track Live Order & View QR</span>
             </button>
             <button
               onClick={() => navigate('/customer')}
-              className="w-full py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-2xl transition-all cursor-pointer"
+              className="w-full py-3 bg-[#FAF9F7] dark:bg-[#2A2A2A] hover:bg-[#E7E5E4] dark:hover:bg-[#333] text-[#78716C] dark:text-[#A8A29E] font-bold text-xs rounded-2xl transition-all cursor-pointer border border-[#E7E5E4] dark:border-[#404040]"
             >
               Back to Menu
             </button>
@@ -490,27 +510,27 @@ const CustomerCartPage = ({ user }) => {
 
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="w-full bg-[#FFFFFF] text-[#171717] min-h-screen font-sans flex flex-col">
+    <div className="w-full bg-[#FAF9F7] dark:bg-[#111111] text-[#171717] dark:text-[#F5F5F5] min-h-screen font-sans flex flex-col transition-colors duration-200">
       {/* HEADER */}
-      <header className="w-full bg-white border-b border-[#E7E5E4] sticky top-0 z-40 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-sm">
+      <header className="w-full bg-white dark:bg-[#1F1F1F] border-b border-[#E7E5E4] dark:border-[#333] sticky top-0 z-40 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-sm">
         <div className="flex items-center space-x-3">
           <button
             onClick={() => navigate('/customer')}
-            className="p-2 hover:bg-[#FFF8F2] text-[#E85D2A] rounded-xl transition-all cursor-pointer border border-[#E85D2A]/20"
+            className="p-2 hover:bg-[#FFF8F2] dark:hover:bg-orange-950/40 text-[#E85D2A] rounded-xl transition-all cursor-pointer border border-[#E85D2A]/20"
             title="Back to Menu"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="font-black text-base text-[#171717]">Your Shopping Cart</h1>
-            <span className="text-[10px] text-[#78716C] font-bold">{tableId} • {totalQty} items</span>
+            <h1 className="font-black text-base text-[#171717] dark:text-white">Your Shopping Cart</h1>
+            <span className="text-[10px] text-[#78716C] dark:text-[#A8A29E] font-bold">{tableId} • {totalQty} items</span>
           </div>
         </div>
 
         {totalQty > 0 && (
           <button
             onClick={clearCart}
-            className="px-3 py-1.5 text-red-500 hover:bg-red-50 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center space-x-1 border border-red-100"
+            className="px-3 py-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center space-x-1 border border-red-100 dark:border-red-900/40"
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Clear Cart</span>
@@ -521,19 +541,19 @@ const CustomerCartPage = ({ user }) => {
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Error Alert */}
         {error && (
-          <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-2xl text-xs font-bold flex items-center space-x-2.5 shadow-sm">
-            <AlertCircle className="w-5 h-5 shrink-0" />
+          <div className="p-4 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 rounded-2xl text-xs font-bold flex items-center space-x-2.5 shadow-sm">
+            <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
             <span>{error}</span>
           </div>
         )}
 
         {totalQty === 0 ? (
-          <div className="bg-white border border-[#E7E5E4] rounded-[32px] p-12 text-center space-y-4 max-w-md mx-auto shadow-sm">
-            <div className="w-16 h-16 bg-[#FFF8F2] text-[#E85D2A] rounded-full flex items-center justify-center mx-auto">
+          <div className="bg-white dark:bg-[#1F1F1F] border border-[#E7E5E4] dark:border-[#333] rounded-[32px] p-12 text-center space-y-4 max-w-md mx-auto shadow-sm">
+            <div className="w-16 h-16 bg-[#FFF8F2] dark:bg-orange-950/40 text-[#E85D2A] rounded-full flex items-center justify-center mx-auto">
               <ShoppingBag className="w-8 h-8" />
             </div>
-            <h2 className="text-lg font-black text-gray-900">Your Cart is Empty</h2>
-            <p className="text-xs text-gray-500 leading-relaxed">
+            <h2 className="text-lg font-black text-gray-900 dark:text-white">Your Cart is Empty</h2>
+            <p className="text-xs text-gray-500 dark:text-[#A8A29E] leading-relaxed">
               Explore our fresh delicious canteen menu and add items to get started.
             </p>
             <button
@@ -547,48 +567,55 @@ const CustomerCartPage = ({ user }) => {
           <div className="grid lg:grid-cols-12 gap-8">
             {/* Left: Cart Items List */}
             <div className="lg:col-span-7 space-y-4">
-              <h2 className="text-xs font-black text-gray-400 uppercase tracking-wider">Selected Items ({totalQty})</h2>
+              <h2 className="text-xs font-black text-gray-400 dark:text-[#A8A29E] uppercase tracking-wider">Selected Items ({totalQty})</h2>
               
               <div className="space-y-3">
                 {Object.values(cart).map((item) => (
                   <div
                     key={item.id}
-                    className="bg-white border border-[#E7E5E4] rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm hover:border-orange-200 transition-all"
+                    className="bg-white dark:bg-[#1F1F1F] border border-[#E7E5E4] dark:border-[#333] rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3 sm:gap-4 shadow-sm hover:border-orange-200 dark:hover:border-orange-900/50 transition-all"
                   >
-                    <div className="flex items-center space-x-3.5">
+                    <div className="flex items-center space-x-3 min-w-0 flex-1">
                       <img
                         src={getItemImage(item)}
                         alt={item.name}
-                        className="w-16 h-16 rounded-xl object-cover border border-gray-100 shrink-0"
+                        className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl object-cover border border-gray-100 dark:border-[#333] shrink-0"
                       />
-                      <div>
-                        <h3 className="font-black text-xs text-gray-900 line-clamp-1">{item.name}</h3>
-                        <span className="text-[11px] font-bold text-orange-600 mt-0.5 block">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="font-black text-xs sm:text-sm text-gray-900 dark:text-white truncate">{item.name}</h3>
+                          {item.unit && item.unit !== 'per portion' && item.unit !== 'Full' && (
+                            <span className="bg-orange-50 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 text-[10px] font-extrabold px-1.5 py-0.5 rounded border border-orange-200/60 dark:border-orange-800/60 shrink-0">
+                              {item.unit}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-bold text-orange-600 dark:text-orange-400 mt-0.5 block">
                           Rs. {item.price.toFixed(2)} each
                         </span>
-                        <span className="text-[10px] text-gray-400">Subtotal: Rs. {(item.price * item.quantity).toFixed(2)}</span>
+                        <span className="text-[10px] text-gray-400 dark:text-[#A8A29E] block">Subtotal: Rs. {(item.price * item.quantity).toFixed(2)}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                      <div className="flex items-center bg-gray-50 border border-gray-200 rounded-xl p-1">
+                    <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+                      <div className="flex items-center bg-gray-50 dark:bg-[#262626] border border-gray-200 dark:border-[#333] rounded-xl p-1">
                         <button
                           onClick={() => removeOneFromCart(item.id)}
-                          className="w-7 h-7 bg-white text-gray-700 font-bold rounded-lg flex items-center justify-center hover:bg-red-50 hover:text-red-600 transition-all cursor-pointer shadow-sm text-xs"
+                          className="w-7 h-7 bg-white dark:bg-[#333] text-gray-700 dark:text-gray-200 font-bold rounded-lg flex items-center justify-center hover:bg-red-50 dark:hover:bg-red-950/50 hover:text-red-600 dark:hover:text-red-400 transition-all cursor-pointer shadow-sm text-xs"
                         >
                           -
                         </button>
-                        <span className="text-xs font-black text-gray-900 px-2.5">{item.quantity}</span>
+                        <span className="text-xs font-black text-gray-900 dark:text-white px-2 sm:px-2.5">{item.quantity}</span>
                         <button
                           onClick={() => addToCart(item)}
-                          className="w-7 h-7 bg-orange-600 text-white font-bold rounded-lg flex items-center justify-center hover:bg-orange-500 transition-all cursor-pointer shadow-sm text-xs"
+                          className="w-7 h-7 bg-[#E85D2A] text-white font-bold rounded-lg flex items-center justify-center hover:bg-orange-600 transition-all cursor-pointer shadow-sm text-xs"
                         >
                           +
                         </button>
                       </div>
                       <button
                         onClick={() => deleteFromCart(item.id)}
-                        className="p-2 text-gray-400 hover:text-red-500 transition-all cursor-pointer"
+                        className="p-1.5 sm:p-2 text-gray-400 dark:text-neutral-500 hover:text-red-500 transition-all cursor-pointer"
                         title="Remove Item"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -600,17 +627,17 @@ const CustomerCartPage = ({ user }) => {
 
               {/* AI ETA Card */}
               {etaInfo && (
-                <div className="bg-gradient-to-br from-orange-50 to-orange-50 border border-orange-100 rounded-2xl p-5 space-y-3">
+                <div className="bg-gradient-to-br from-orange-50 to-orange-50/50 dark:from-[#262626] dark:to-[#1F1F1F] border border-orange-100 dark:border-orange-950/60 rounded-2xl p-5 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <Bot className="w-4 h-4 text-orange-600" />
-                      <span className="text-xs font-black text-orange-900">AI Kitchen Prep Forecast</span>
+                      <Bot className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                      <span className="text-xs font-black text-orange-900 dark:text-orange-200">AI Kitchen Prep Forecast</span>
                     </div>
-                    <span className="text-xs font-black text-emerald-600 bg-emerald-100/80 px-2.5 py-1 rounded-full">
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 bg-emerald-100/80 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200/50 dark:border-emerald-800/40">
                       ~{etaInfo.estimatedTime} Mins
                     </span>
                   </div>
-                  <p className="text-[11px] text-orange-700 leading-relaxed">
+                  <p className="text-[11px] text-orange-700 dark:text-orange-300 leading-relaxed">
                     {etaInfo.explanation || `Estimated ~${etaInfo.estimatedTime} mins based on current kitchen load (${etaInfo.kitchenLoad}) and peak-hour queue analysis.`}
                   </p>
                 </div>
@@ -621,11 +648,11 @@ const CustomerCartPage = ({ user }) => {
             <div className="lg:col-span-5 space-y-6">
               
               {/* Customer Verification Card */}
-              <div className="bg-white border border-[#E7E5E4] rounded-3xl p-6 shadow-sm space-y-5">
+              <div className="bg-white dark:bg-[#1F1F1F] border border-[#E7E5E4] dark:border-[#333] rounded-3xl p-6 shadow-sm space-y-5">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-gray-400">Customer Details</h3>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-gray-400 dark:text-[#A8A29E]">Customer Details</h3>
                   {otpVerified && (
-                    <span className="text-[10px] font-extrabold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center space-x-1">
+                    <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 flex items-center space-x-1">
                       <Check className="w-3 h-3" />
                       <span>Verified</span>
                     </span>
@@ -635,23 +662,23 @@ const CustomerCartPage = ({ user }) => {
                 {!otpVerified ? (
                   <div className="space-y-3.5">
                     <div>
-                      <label className="text-[11px] font-bold text-gray-600 block mb-1">Your Full Name</label>
+                      <label className="text-[11px] font-bold text-gray-600 dark:text-gray-300 block mb-1">Your Full Name</label>
                       <input
                         type="text"
                         value={guestName}
                         onChange={(e) => setGuestName(e.target.value)}
                         placeholder="John Doe"
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-orange-600"
+                        className="w-full bg-gray-50 dark:bg-[#262626] border border-gray-200 dark:border-[#333] rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-orange-600"
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] font-bold text-gray-600 block mb-1">Email (for receipts & updates)</label>
+                      <label className="text-[11px] font-bold text-gray-600 dark:text-gray-300 block mb-1">Email (for receipts & updates)</label>
                       <input
                         type="email"
                         value={guestEmail}
                         onChange={(e) => setGuestEmail(e.target.value)}
                         placeholder="john@example.com"
-                        className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 focus:outline-none focus:border-orange-600"
+                        className="w-full bg-gray-50 dark:bg-[#262626] border border-gray-200 dark:border-[#333] rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-orange-600"
                       />
                     </div>
 
@@ -691,12 +718,12 @@ const CustomerCartPage = ({ user }) => {
                     )}
                   </div>
                 ) : (
-                  <div className="p-3 bg-emerald-50/70 border border-emerald-100 rounded-xl flex items-center justify-between text-xs">
+                  <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/40 rounded-xl flex items-center justify-between text-xs">
                     <div>
-                      <strong className="text-gray-900 font-bold block">{guestName || 'Customer'}</strong>
-                      <span className="text-gray-500 text-[11px]">{guestEmail}</span>
+                      <strong className="text-gray-900 dark:text-white font-bold block">{guestName || 'Customer'}</strong>
+                      <span className="text-gray-500 dark:text-gray-400 text-[11px]">{guestEmail}</span>
                     </div>
-                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-lg">
+                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-1 rounded-lg">
                       Ready to Order
                     </span>
                   </div>
@@ -704,11 +731,11 @@ const CustomerCartPage = ({ user }) => {
               </div>
 
               {/* Payment Method Card */}
-              <div className="bg-white border border-[#E7E5E4] rounded-3xl p-6 shadow-sm space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400">Payment Option</h3>
+              <div className="bg-white dark:bg-[#1F1F1F] border border-[#E7E5E4] dark:border-[#333] rounded-3xl p-6 shadow-sm space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400 dark:text-[#A8A29E]">Payment Option</h3>
                 
                 {!paymentSettings.codEnabled && !paymentSettings.onlineEnabled ? (
-                  <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl text-xs font-semibold flex items-center space-x-2.5 shadow-sm">
+                  <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-2xl text-xs font-semibold flex items-center space-x-2.5 shadow-sm">
                     <AlertCircle className="w-5 h-5 shrink-0 text-rose-500" />
                     <div>
                       <strong className="block font-bold">Kitchen Closed</strong>
@@ -724,16 +751,16 @@ const CustomerCartPage = ({ user }) => {
                         onClick={() => { if (paymentSettings.codEnabled) setPaymentMethod('COD'); }}
                         className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all ${
                           !paymentSettings.codEnabled
-                            ? 'opacity-50 cursor-not-allowed bg-gray-100 border-gray-200'
+                            ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-[#262626] border-gray-200 dark:border-[#333]'
                             : paymentMethod === 'COD'
-                            ? 'border-orange-600 bg-orange-50/50 ring-2 ring-orange-600/10 cursor-pointer'
-                            : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                            ? 'border-orange-600 bg-orange-50/50 dark:bg-orange-950/40 ring-2 ring-orange-600/10 cursor-pointer'
+                            : 'border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#404040] cursor-pointer'
                         }`}
                       >
-                        <Banknote className={`w-5 h-5 ${paymentMethod === 'COD' && paymentSettings.codEnabled ? 'text-orange-600' : 'text-gray-400'}`} />
+                        <Banknote className={`w-5 h-5 ${paymentMethod === 'COD' && paymentSettings.codEnabled ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`} />
                         <div className="mt-3">
-                          <strong className="text-xs font-bold block text-gray-900">Pay at Counter</strong>
-                          <span className="text-[10px] text-gray-500">
+                          <strong className="text-xs font-bold block text-gray-900 dark:text-white">Pay at Counter</strong>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400">
                             {paymentSettings.codEnabled ? 'Cash on Delivery' : 'Unavailable'}
                           </span>
                         </div>
@@ -745,16 +772,16 @@ const CustomerCartPage = ({ user }) => {
                         onClick={() => { if (paymentSettings.onlineEnabled) setPaymentMethod('Easypaisa'); }}
                         className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between transition-all ${
                           !paymentSettings.onlineEnabled
-                            ? 'opacity-50 cursor-not-allowed bg-gray-100 border-gray-200'
+                            ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-[#262626] border-gray-200 dark:border-[#333]'
                             : paymentMethod !== 'COD'
-                            ? 'border-orange-600 bg-orange-50/50 ring-2 ring-orange-600/10 cursor-pointer'
-                            : 'border-gray-200 hover:border-gray-300 cursor-pointer'
+                            ? 'border-orange-600 bg-orange-50/50 dark:bg-orange-950/40 ring-2 ring-orange-600/10 cursor-pointer'
+                            : 'border-gray-200 dark:border-[#333] hover:border-gray-300 dark:hover:border-[#404040] cursor-pointer'
                         }`}
                       >
-                        <Smartphone className={`w-5 h-5 ${paymentMethod !== 'COD' && paymentSettings.onlineEnabled ? 'text-orange-600' : 'text-gray-400'}`} />
+                        <Smartphone className={`w-5 h-5 ${paymentMethod !== 'COD' && paymentSettings.onlineEnabled ? 'text-orange-600 dark:text-orange-400' : 'text-gray-400'}`} />
                         <div className="mt-3">
-                          <strong className="text-xs font-bold block text-gray-900">Online Payment</strong>
-                          <span className="text-[10px] text-gray-500">
+                          <strong className="text-xs font-bold block text-gray-900 dark:text-white">Online Payment</strong>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400">
                             {paymentSettings.onlineEnabled ? 'Easypaisa / JazzCash' : 'Unavailable'}
                           </span>
                         </div>
@@ -762,14 +789,14 @@ const CustomerCartPage = ({ user }) => {
                     </div>
 
                     {!paymentSettings.codEnabled && paymentSettings.onlineEnabled && (
-                      <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[11px] font-medium flex items-center space-x-2">
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-[11px] font-medium flex items-center space-x-2">
                         <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
                         <span>Sorry, Pay at Counter is currently unavailable. Please choose Online Payment to continue.</span>
                       </div>
                     )}
 
                     {paymentSettings.codEnabled && !paymentSettings.onlineEnabled && (
-                      <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-[11px] font-medium flex items-center space-x-2">
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-xl text-[11px] font-medium flex items-center space-x-2">
                         <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
                         <span>Sorry, Online Payment is currently unavailable. Please choose Pay at Counter to continue.</span>
                       </div>
@@ -779,10 +806,10 @@ const CustomerCartPage = ({ user }) => {
               </div>
 
               {/* Order Summary & Placement Button */}
-              <div className="bg-white border border-[#E7E5E4] rounded-3xl p-6 shadow-sm space-y-4">
-                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400">Order Summary</h3>
+              <div className="bg-white dark:bg-[#1F1F1F] border border-[#E7E5E4] dark:border-[#333] rounded-3xl p-6 shadow-sm space-y-4">
+                <h3 className="text-xs font-black uppercase tracking-wider text-gray-400 dark:text-[#A8A29E]">Order Summary</h3>
                 
-                <div className="space-y-2 text-xs text-gray-600">
+                <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300">
                   <div className="flex justify-between">
                     <span>Subtotal:</span>
                     <span>Rs. {getTotal()}</span>
@@ -791,9 +818,9 @@ const CustomerCartPage = ({ user }) => {
                     <span>Service / GST:</span>
                     <span>Rs. 0.00</span>
                   </div>
-                  <div className="flex justify-between text-sm font-black text-gray-900 border-t border-gray-100 pt-3">
+                  <div className="flex justify-between text-sm font-black text-gray-900 dark:text-white border-t border-gray-100 dark:border-[#333] pt-3">
                     <span>Grand Total:</span>
-                    <span className="text-orange-600 text-base">Rs. {getTotal()}</span>
+                    <span className="text-orange-600 dark:text-orange-400 text-base">Rs. {getTotal()}</span>
                   </div>
                 </div>
 
@@ -829,15 +856,15 @@ const CustomerCartPage = ({ user }) => {
       {/* Online Wallet Payment Modal */}
       {showOnlinePaymentModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 space-y-5 animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center border-b border-gray-100 pb-4">
+          <div className="bg-white dark:bg-[#1F1F1F] rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border border-gray-100 dark:border-[#333] space-y-5 animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center border-b border-gray-100 dark:border-[#333] pb-4">
               <div>
-                <h3 className="text-base font-black text-gray-900">Mobile Wallet Payment</h3>
-                <span className="text-[10px] text-gray-400">Fast &amp; Instant Authorization</span>
+                <h3 className="text-base font-black text-gray-900 dark:text-white">Mobile Wallet Payment</h3>
+                <span className="text-[10px] text-gray-400 dark:text-[#A8A29E]">Fast &amp; Instant Authorization</span>
               </div>
               <button
                 onClick={() => setShowOnlinePaymentModal(false)}
-                className="text-gray-400 hover:text-gray-600 font-bold"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 font-bold"
               >
                 ✕
               </button>
@@ -849,8 +876,8 @@ const CustomerCartPage = ({ user }) => {
                   onClick={() => setWalletProvider('Easypaisa')}
                   className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     walletProvider === 'Easypaisa'
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-600/20'
-                      : 'border-gray-200 text-gray-600'
+                      ? 'border-emerald-600 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 ring-2 ring-emerald-600/20'
+                      : 'border-gray-200 dark:border-[#333] text-gray-600 dark:text-gray-300'
                   }`}
                 >
                   Easypaisa
@@ -859,8 +886,8 @@ const CustomerCartPage = ({ user }) => {
                   onClick={() => setWalletProvider('JazzCash')}
                   className={`py-3 px-4 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                     walletProvider === 'JazzCash'
-                      ? 'border-red-600 bg-red-50 text-red-700 ring-2 ring-red-600/20'
-                      : 'border-gray-200 text-gray-600'
+                      ? 'border-red-600 bg-red-50 dark:bg-red-950/50 text-red-700 dark:text-red-300 ring-2 ring-red-600/20'
+                      : 'border-gray-200 dark:border-[#333] text-gray-600 dark:text-gray-300'
                   }`}
                 >
                   JazzCash
@@ -868,26 +895,26 @@ const CustomerCartPage = ({ user }) => {
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-gray-600 block mb-1">Registered Account Mobile #</label>
+                <label className="text-[11px] font-bold text-gray-600 dark:text-gray-300 block mb-1">Registered Account Mobile #</label>
                 <input
                   type="text"
                   value={walletPhone}
                   onChange={(e) => setWalletPhone(e.target.value)}
                   placeholder="0300-1234567"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-900 font-mono focus:outline-none focus:border-orange-600"
+                  className="w-full bg-gray-50 dark:bg-[#262626] border border-gray-200 dark:border-[#333] rounded-xl px-3.5 py-2.5 text-xs text-gray-900 dark:text-white font-mono focus:outline-none focus:border-orange-600"
                 />
               </div>
 
-              <div className="p-3.5 bg-gray-50 rounded-xl flex justify-between items-center text-xs font-bold">
-                <span className="text-gray-600">Total Payable:</span>
-                <span className="text-orange-600 text-sm">Rs. {getTotal()}</span>
+              <div className="p-3.5 bg-gray-50 dark:bg-[#262626] rounded-xl flex justify-between items-center text-xs font-bold">
+                <span className="text-gray-600 dark:text-gray-300">Total Payable:</span>
+                <span className="text-orange-600 dark:text-orange-400 text-sm">Rs. {getTotal()}</span>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 onClick={() => setShowOnlinePaymentModal(false)}
-                className="py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                className="py-3 bg-gray-100 dark:bg-[#333] hover:bg-gray-200 dark:hover:bg-[#404040] text-gray-700 dark:text-gray-200 font-bold text-xs rounded-xl transition-all cursor-pointer"
               >
                 Cancel
               </button>

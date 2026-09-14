@@ -4,7 +4,12 @@ from typing import List, Optional
 import os
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor
+try:
+    from sklearn.ensemble import RandomForestRegressor
+    SKLEARN_AVAILABLE = True
+except Exception as e:
+    print(f"Warning: scikit-learn not available ({e}); ETA model will use fallback.")
+    SKLEARN_AVAILABLE = False
 from model import forecast_demand
 
 app = FastAPI(
@@ -16,48 +21,64 @@ app = FastAPI(
 # Train the ETA model at startup
 print("Training RandomForest ETA model...")
 eta_model = None
-try:
-    def train_eta_model():
-        np.random.seed(42)
-        n_samples = 200
-        base_etas = np.random.uniform(3, 20, n_samples)
-        queue_lengths = np.random.randint(0, 15, n_samples)
-        hours = np.random.randint(8, 22, n_samples)
-        days = np.random.randint(0, 7, n_samples)
-        is_peak = np.array([1 if h in [12, 13, 18, 19] else 0 for h in hours])
-        
-        kitchen_loads = []
-        for q in queue_lengths:
-            if q <= 3: kitchen_loads.append(0)
-            elif q <= 7: kitchen_loads.append(1)
-            else: kitchen_loads.append(2)
-        kitchen_loads = np.array(kitchen_loads)
-        
-        historical_delays = np.random.uniform(-1, 5, n_samples)
-        noise = np.random.normal(0, 1.0, n_samples)
-        actual_times = base_etas + (queue_lengths * 1.2) + (is_peak * 3.0) + (kitchen_loads * 2.0) + historical_delays + noise
-        actual_times = np.clip(actual_times, 2.0, None)
-        
-        df = pd.DataFrame({
-            'base_eta': base_etas,
-            'queue_length': queue_lengths,
-            'hour': hours,
-            'day_of_week': days,
-            'is_peak_hour': is_peak,
-            'kitchen_load': kitchen_loads,
-            'historical_delay': historical_delays,
-            'actual_time': actual_times
-        })
-        
-        features = ['base_eta', 'queue_length', 'hour', 'day_of_week', 'is_peak_hour', 'kitchen_load', 'historical_delay']
-        model = RandomForestRegressor(n_estimators=50, random_state=42)
-        model.fit(df[features], df['actual_time'])
-        return model
+eta_model = None
 
+# --------------------
+# Train ETA model (optional – uses scikit‑learn if available)
+# --------------------
+
+def train_eta_model():
+    if not SKLEARN_AVAILABLE:
+        return None
+    np.random.seed(42)
+    n_samples = 200
+    base_etas = np.random.uniform(3, 20, n_samples)
+    queue_lengths = np.random.randint(0, 15, n_samples)
+    hours = np.random.randint(8, 22, n_samples)
+    days = np.random.randint(0, 7, n_samples)
+    is_peak = np.array([1 if h in [12, 13, 18, 19] else 0 for h in hours])
+
+    kitchen_loads = []
+    for q in queue_lengths:
+        if q <= 3:
+            kitchen_loads.append(0)
+        elif q <= 7:
+            kitchen_loads.append(1)
+        else:
+            kitchen_loads.append(2)
+    kitchen_loads = np.array(kitchen_loads)
+
+    historical_delays = np.random.uniform(-1, 5, n_samples)
+    noise = np.random.normal(0, 1.0, n_samples)
+    actual_times = base_etas + (queue_lengths * 1.2) + (is_peak * 3.0) + (kitchen_loads * 2.0) + historical_delays + noise
+    actual_times = np.clip(actual_times, 2.0, None)
+
+    df = pd.DataFrame({
+        'base_eta': base_etas,
+        'queue_length': queue_lengths,
+        'hour': hours,
+        'day_of_week': days,
+        'is_peak_hour': is_peak,
+        'kitchen_load': kitchen_loads,
+        'historical_delay': historical_delays,
+        'actual_time': actual_times
+    })
+
+    features = ['base_eta', 'queue_length', 'hour', 'day_of_week', 'is_peak_hour', 'kitchen_load', 'historical_delay']
+    model = RandomForestRegressor(n_estimators=50, random_state=42)
+    model.fit(df[features], df['actual_time'])
+    return model
+
+# Initialise the model (fallback if sklearn missing)
+try:
     eta_model = train_eta_model()
-    print("RandomForest ETA model trained successfully.")
+    if eta_model is not None:
+        print("RandomForest ETA model trained successfully.")
+    else:
+        print("Skipping model training – using fallback ETA calculations.")
 except Exception as e:
     print(f"Error training RandomForest ETA model: {e}")
+    eta_model = None
 
 class ForecastRequest(BaseModel):
     item_name: str

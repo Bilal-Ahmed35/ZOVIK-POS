@@ -164,15 +164,30 @@ const KitchenDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const [pendingStatusOrderIds, setPendingStatusOrderIds] = useState(new Set());
+
   const handleUpdateStatus = async (orderId, nextStatus) => {
+    if (pendingStatusOrderIds.has(orderId)) return;
+    setPendingStatusOrderIds((prev) => new Set(prev).add(orderId));
+
+    // Immediate Optimistic UI Feedback
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
+    );
+
     try {
       await api.put(`/orders/${orderId}/status`, { status: nextStatus });
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
-      );
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || 'Failed to update order status.');
+      // Rollback on error
+      fetchActiveOrders();
+    } finally {
+      setPendingStatusOrderIds((prev) => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
     }
   };
 

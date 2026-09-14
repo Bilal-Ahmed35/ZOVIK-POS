@@ -1,7 +1,13 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from sklearn.ensemble import RandomForestRegressor
+
+try:
+    from sklearn.ensemble import RandomForestRegressor
+    SKLEARN_AVAILABLE = True
+except Exception as e:
+    print(f"Warning in model.py: scikit-learn not available ({e}); using heuristic fallback.")
+    SKLEARN_AVAILABLE = False
 
 def generate_synthetic_data(item_name: str, days: int = 90) -> pd.DataFrame:
     """
@@ -114,22 +120,37 @@ def forecast_demand(item_name: str, target_features: dict, historical_sales: lis
             # Overwrite the last n_actual sales quantities in our df with the actual ones
             df.iloc[-n_actual:, df.columns.get_loc('sales_quantity')] = historical_sales[-n_actual:]
             
-        # 3. Train RandomForestRegressor
+        # 3. Train RandomForestRegressor or use Heuristic Fallback
         features_list = ['weekday', 'month', 'season', 'promotions', 'exams_season', 'weather']
         X = df[features_list]
         y = df['sales_quantity']
         
-        model = RandomForestRegressor(n_estimators=50, random_state=42)
-        model.fit(X, y)
-        
-        # 4. Predict for target features
-        target_df = pd.DataFrame([target_features])
-        prediction = model.predict(target_df[features_list])[0]
-        prediction = max(0.0, float(prediction))
-        
-        # 5. Compute confidence index based on training score
-        r2 = model.score(X, y)
-        confidence = float(max(0.5, min(0.98, 0.6 + (r2 * 0.38))))
+        if SKLEARN_AVAILABLE:
+            model = RandomForestRegressor(n_estimators=50, random_state=42)
+            model.fit(X, y)
+            target_df = pd.DataFrame([target_features])
+            prediction = model.predict(target_df[features_list])[0]
+            prediction = max(0.0, float(prediction))
+            r2 = model.score(X, y)
+            confidence = float(max(0.5, min(0.98, 0.6 + (r2 * 0.38))))
+            note_str = "RandomForestRegressor forecasting completed."
+        else:
+            # Weighted historical average matching target weekday & conditions
+            matching = df[(df['weekday'] == target_features['weekday'])]
+            if len(matching) > 0:
+                base_pred = matching['sales_quantity'].mean()
+            else:
+                base_pred = y.mean()
+            
+            # Apply promo/exam modifiers
+            if target_features.get('promotions', 0) == 1:
+                base_pred *= 1.25
+            if target_features.get('exams_season', 0) == 1:
+                base_pred *= 1.15
+            prediction = max(0.0, float(base_pred))
+            confidence = 0.75
+            note_str = "Heuristic demand forecasting completed (sklearn unavailable)."
+
         
         # 6. Calculate trend / percentage change relative to normal weekday average
         normal_weekday_sales = df[(df['weekday'] == target_features['weekday']) & 
@@ -146,7 +167,7 @@ def forecast_demand(item_name: str, target_features: dict, historical_sales: lis
             "forecast": round(prediction, 2),
             "confidence": round(confidence, 2),
             "percent_change": round(percent_change, 1),
-            "note": "RandomForestRegressor forecasting completed."
+            "note": note_str
         }
     except Exception as e:
         print(f"RandomForest modeling failure: {str(e)}")
