@@ -200,6 +200,17 @@ You need **3 separate terminal windows** running at the same time:
 
 ---
 
+## Key Features
+
+- **🍔 Independent Portion / Variant Selection**: Food cards support multi-portion options (e.g. 250 gm, 500 gm). Each portion maintains independent quantities, distinct cart lines, in-cart badges, and subtotal previews.
+- **⚡ Persistent Session Cart**: Instant local state updates backed by database session synchronization (`PUT`/`DELETE`). Items deleted from cart remain deleted across navigation and reloads.
+- **⏱️ Real-Time AI Kitchen ETA & Ticking Countdown**: Authoritative preparation time calculation from Python AI service based on order items and kitchen workload. Features client-side zero-overhead ticking timer (`0 API calls/sec`), status-aware freezing on `READY`/`COMPLETED`, and multi-customer order isolation.
+- **🌙 Complete Premium Dark Theme System**: Full HSL dark-mode system support across Customer, Admin, Cashier, Vendor, and Kitchen views with zero unstyled white elements.
+- **📱 Touch & Mobile Responsive UX**: Mobile-optimized layouts tested across 320px–414px viewports with scaled thumbnails, sticky headers, non-overlapping action buttons, and touch-friendly controls.
+- **🔄 Table Transfer & Rerouting**: Real-time table switching modal and post-order delivery table rerouting with instant kitchen notification.
+
+---
+
 ## What to Share With Someone Setting This Up
 
 Give them these **two things**:
