@@ -10,7 +10,7 @@ const ROLE_CONFIGS = {
     expectedRole: 'KITCHEN',
     icon: Flame,
     badgeText: 'Kitchen Display System',
-    defaultEmail: 'kitchen@pos.com',
+    defaultEmail: 'kitchen@zovikpos.com',
     targetRoute: '/kitchen',
     mismatchError: 'This portal is strictly for Kitchen staff. Your account is registered under a different role.',
   },
@@ -20,7 +20,7 @@ const ROLE_CONFIGS = {
     expectedRole: 'VENDOR',
     icon: CreditCard,
     badgeText: 'POS Terminal Portal',
-    defaultEmail: 'vendor@pos.com',
+    defaultEmail: 'cashier@zovikpos.com',
     targetRoute: '/cashier',
     mismatchError: 'This portal is strictly for Cashier staff. Your account is registered under a different role.',
   },
@@ -30,7 +30,7 @@ const ROLE_CONFIGS = {
     expectedRole: 'ADMIN',
     icon: ShieldCheck,
     badgeText: 'System Admin Control',
-    defaultEmail: 'admin@pos.com',
+    defaultEmail: 'admin@zovikpos.com',
     targetRoute: '/admin',
     mismatchError: 'This portal is strictly for Administrator accounts.',
   },
@@ -40,7 +40,7 @@ const ROLE_CONFIGS = {
     expectedRole: 'CUSTOMER',
     icon: User,
     badgeText: 'Customer Account',
-    defaultEmail: 'customer@pos.com',
+    defaultEmail: 'customer@zovikpos.com',
     targetRoute: '/customer',
     mismatchError: 'Invalid customer credentials.',
   },
@@ -51,10 +51,15 @@ const RoleLogin = ({ roleType = 'CASHIER', onLoginSuccess }) => {
   const config = ROLE_CONFIGS[roleType] || ROLE_CONFIGS.CASHIER;
   const RoleIcon = config.icon;
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(config.defaultEmail || '');
+  const [password, setPassword] = useState('Redline742454');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  React.useEffect(() => {
+    setEmail(config.defaultEmail || '');
+    setPassword('Redline742454');
+  }, [roleType]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -92,7 +97,7 @@ const RoleLogin = ({ roleType = 'CASHIER', onLoginSuccess }) => {
 
   const handleQuickFill = () => {
     setEmail(config.defaultEmail);
-    setPassword('password123');
+    setPassword('Redline742454');
   };
 
   return (

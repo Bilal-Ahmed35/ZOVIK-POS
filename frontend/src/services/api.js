@@ -1,6 +1,9 @@
 import axios from 'axios';
 
 const getApiBase = () => {
+  if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
   if (typeof window !== 'undefined' && window.location) {
     const host = window.location.hostname;
     return `http://${host}:5001/api`;
@@ -214,7 +217,7 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-          const res = await axios.post(`${API_BASE}/auth/refresh-token`, {
+          const res = await axios.post(`${getApiBase()}/auth/refresh-token`, {
             refreshToken: storedRefreshToken,
           });
 

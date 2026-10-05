@@ -2,6 +2,7 @@ const { prisma } = require('../config/db');
 const { emitToVendor, emitToUser, emitToKitchen, emitToAdmin } = require('../sockets/socket');
 const { sendPaymentConfirmedEmail, sendOrderCancellationEmail } = require('../services/emailService');
 const { logAudit } = require('../middleware/auditMiddleware');
+const { deductInventoryForConfirmedOrder, restoreInventoryForOrder } = require('../services/inventoryDeductionService');
 
 /**
  * Get current Payment Availability Settings (COD & Online)
@@ -217,41 +218,14 @@ const verifyTransaction = async (req, res) => {
     const newPaymentStatus = approve ? 'VERIFIED' : 'FAILED';
 
     const updatedOrder = await prisma.$transaction(async (tx) => {
-      // If rejecting payment, restore reserved inventory stock
+      // If approving payment, trigger inventory deduction
+      if (approve && previousStatus !== 'PAID') {
+        await deductInventoryForConfirmedOrder(order.id, staffUserId, tx);
+      }
+
+      // If rejecting payment, trigger stock restoration idempotently
       if (!approve && previousStatus !== 'PAYMENT_FAILED') {
-        for (const item of order.orderItems) {
-          await tx.menuItem.update({
-            where: { id: item.menuItemId },
-            data: { stock: { increment: item.quantity } },
-          });
-
-          const inventoryItem = await tx.inventoryItem.findFirst({
-            where: { name: item.nameSnapshot },
-          });
-
-          if (inventoryItem) {
-            const qtyBefore = inventoryItem.stockLevel;
-            const qtyAfter = qtyBefore + item.quantity;
-
-            await tx.inventoryItem.update({
-              where: { id: inventoryItem.id },
-              data: { stockLevel: qtyAfter },
-            });
-
-            await tx.inventoryLog.create({
-              data: {
-                inventoryItemId: inventoryItem.id,
-                quantityBefore: qtyBefore,
-                quantityAfter: qtyAfter,
-                changeQty: item.quantity,
-                type: 'RESTOCK',
-                reason: `Payment rejected for Order #${order.orderNumber} - Stock restored`,
-                orderId: order.id,
-                userId: staffUserId,
-              },
-            });
-          }
-        }
+        await restoreInventoryForOrder(order.id, staffUserId, reason || 'Payment verification rejected by staff.', tx);
       }
 
       // Record OrderStatusHistory
@@ -279,7 +253,7 @@ const verifyTransaction = async (req, res) => {
           etaPrediction: true,
         },
       });
-    });
+    }, { maxWait: 15000, timeout: 30000 });
 
     // Notify all realtime layers
     emitToUser(updatedOrder.userId, 'order:update', updatedOrder);

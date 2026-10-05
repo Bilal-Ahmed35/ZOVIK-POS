@@ -10,9 +10,40 @@ const getAllItems = async (req, res) => {
       whereClause.isActive = true;
     }
     const items = await prisma.menuItem.findMany({
-      where: whereClause
+      where: whereClause,
+      include: {
+        recipeItems: {
+          include: { inventoryItem: true }
+        }
+      },
+      orderBy: { name: 'asc' }
     });
-    return res.json({ items });
+
+    const enrichedItems = items.map(item => {
+      const hasStock = item.stock > 0;
+      let rawIngredientsAvailable = true;
+      const outOfStockIngredients = [];
+
+      if (item.recipeItems && item.recipeItems.length > 0) {
+        for (const r of item.recipeItems) {
+          if (r.inventoryItem && r.inventoryItem.stockLevel <= 0) {
+            rawIngredientsAvailable = false;
+            outOfStockIngredients.push(r.inventoryItem.name);
+          }
+        }
+      }
+
+      const isAvailable = item.isActive && hasStock && rawIngredientsAvailable;
+
+      return {
+        ...item,
+        isAvailable,
+        rawIngredientsAvailable,
+        outOfStockIngredients
+      };
+    });
+
+    return res.json({ items: enrichedItems });
   } catch (error) {
     console.error('Fetch menu items error:', error);
     return res.status(500).json({ error: 'Failed to retrieve menu items.' });

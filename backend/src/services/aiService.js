@@ -47,7 +47,7 @@ const getInventoryForecast = async (itemName, historicalSales, features = {}) =>
       exams_season,
       weather,
       historical_sales: actualHistory
-    }, { timeout: 3000 });
+    }, { timeout: 500 });
 
     return {
       forecast: response.data.forecast,

@@ -50,6 +50,7 @@ model User {
   sessions      Session[]
   auditLogs     AuditLog[]
   statusChanges OrderStatusHistory[]
+  inventoryLogs InventoryLog[]
 }
 
 model Session {
@@ -118,6 +119,7 @@ model MenuItem {
   updatedAt   DateTime    @updatedAt
   orderItems  OrderItem[]
   cartItems   CartItem[]
+  recipeItems RecipeItem[]
 }
 
 model Order {
@@ -202,30 +204,77 @@ model DemandForecast {
   updatedAt    DateTime @updatedAt
 }
 
+model Supplier {
+  id            Int             @id @default(autoincrement())
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?
+  notes         String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  inventoryItems InventoryItem[]
+  logs          InventoryLog[]
+}
+
+model RecipeItem {
+  id              Int           @id @default(autoincrement())
+  menuItemId      Int
+  menuItem        MenuItem      @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  inventoryItemId Int
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  quantity        Float
+  unit            String        @default("PCS")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([menuItemId, inventoryItemId])
+}
+
 model InventoryItem {
   id           Int            @id @default(autoincrement())
   branchId     Int?
   branch       Branch?        @relation(fields: [branchId], references: [id])
-  name         String         @unique
+  name         String
+  category     String         @default("Other")
+  sku          String?
   stockLevel   Float          @default(0.0)
   unit         String
   minThreshold Float          @default(10.0)
+  maxThreshold Float          @default(100.0)
+  costPrice    Float          @default(0.0)
+  expiryDate   DateTime?
+  supplierId   Int?
+  supplier     Supplier?      @relation(fields: [supplierId], references: [id])
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   logs         InventoryLog[]
+  recipeItems  RecipeItem[]
+
+  @@unique([branchId, name])
 }
 
 model InventoryLog {
   id              Int           @id @default(autoincrement())
   inventoryItemId Int
   inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  type            String        // STOCK_IN, USAGE, WASTAGE, ADJUSTMENT, RESTORATION
+  quantity        Float         @default(0.0)
   quantityBefore  Float         @default(0.0)
   quantityAfter   Float         @default(0.0)
-  changeQty       Float
-  type            String // DEDUCTION, RESTOCK, WASTAGE
+  changeQty       Float         @default(0.0)
+  cost            Float?
   reason          String?
   orderId         Int?
+  orderItemId     Int?
+  batchNumber     String?
+  expiryDate      DateTime?
+  supplierId      Int?
+  supplier        Supplier?     @relation(fields: [supplierId], references: [id])
   userId          Int?
+  user            User?         @relation(fields: [userId], references: [id])
+  createdBy       Int?
   createdAt       DateTime      @default(now())
 }
 

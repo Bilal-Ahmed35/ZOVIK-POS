@@ -89,14 +89,20 @@ function App() {
   }, [location.pathname, user.role]);
 
   const autoAuthenticateRole = async (targetRole) => {
-    let email = 'customer@pos.com';
+    let email = 'customer@zovikpos.com';
     let prefix = 'customer';
-    if (targetRole === 'ADMIN') { email = 'admin@pos.com'; prefix = 'admin'; }
-    else if (targetRole === 'VENDOR') { email = 'vendor@pos.com'; prefix = 'vendor'; }
-    else if (targetRole === 'KITCHEN') { email = 'kitchen@pos.com'; prefix = 'kitchen'; }
+    if (targetRole === 'ADMIN') { email = 'admin@zovikpos.com'; prefix = 'admin'; }
+    else if (targetRole === 'VENDOR') { email = 'cashier@zovikpos.com'; prefix = 'vendor'; }
+    else if (targetRole === 'KITCHEN') { email = 'kitchen@zovikpos.com'; prefix = 'kitchen'; }
 
     try {
-      const response = await api.post('/auth/login', { email, password: 'password123' });
+      let response;
+      try {
+        response = await api.post('/auth/login', { email, password: 'Redline742454' });
+      } catch (e1) {
+        // Fallback for demo password
+        response = await api.post('/auth/login', { email, password: 'password123' });
+      }
       const { user: loggedInUser, accessToken, refreshToken } = response.data;
       setActiveAuthTokens(accessToken, refreshToken);
       if (typeof sessionStorage !== 'undefined') {

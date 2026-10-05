@@ -11,6 +11,8 @@ const { calculateETA } = require('../services/etaService');
 const { generateOrderTrackingToken, verifyTableToken } = require('../services/qrSecurityService');
 const { logAudit } = require('../middleware/auditMiddleware');
 
+const { deductInventoryForConfirmedOrder, restoreInventoryForOrder } = require('../services/inventoryDeductionService');
+
 /**
  * Generate human-friendly unique order number (e.g. ORD-2026-8941)
  */
@@ -68,7 +70,7 @@ const createOrder = async (req, res) => {
     let resolvedSessionId = null;
     let resolvedTableId = null;
     let resolvedTableNumber = 'Takeaway';
-    let resolvedBranchId = 1;
+    let resolvedBranchId = null;
 
     // Verify dining session and physical table with auto-healing fallback
     let existingSession = null;
@@ -83,7 +85,7 @@ const createOrder = async (req, res) => {
       resolvedSessionId = existingSession.id;
       resolvedTableId = existingSession.tableId;
       resolvedTableNumber = existingSession.table?.tableNumber || `Table ${existingSession.tableId}`;
-      resolvedBranchId = existingSession.table?.branchId || 1;
+      resolvedBranchId = existingSession.table?.branchId || null;
     } else {
       // Session missing or inactive -> resolve physical table and create/obtain active session
       const targetTableSearch = tableId || (existingSession?.tableId ? String(existingSession.tableId) : 'Table 4');
@@ -139,7 +141,7 @@ const createOrder = async (req, res) => {
       console.warn('AI ETA calculation warning:', etaErr.message);
     }
 
-    // Run DB transaction for atomic order creation and inventory deduction
+    // Run DB transaction for atomic order creation
     const order = await prisma.$transaction(async (tx) => {
       let subtotal = 0.0;
       const orderItemsData = [];
@@ -156,39 +158,6 @@ const createOrder = async (req, res) => {
         const qty = parseInt(item.quantity, 10) || 1;
         if (menuItem.stock < qty) {
           throw new Error(`Insufficient stock for "${menuItem.name}". Only ${menuItem.stock} available.`);
-        }
-
-        // Deduct stock from MenuItem
-        await tx.menuItem.update({
-          where: { id: menuItem.id },
-          data: { stock: menuItem.stock - qty },
-        });
-
-        // Deduct stock from corresponding InventoryItem
-        const inventoryItem = await tx.inventoryItem.findFirst({
-          where: { name: menuItem.name },
-        });
-
-        if (inventoryItem) {
-          const qtyBefore = inventoryItem.stockLevel;
-          const qtyAfter = Math.max(0, qtyBefore - qty);
-
-          await tx.inventoryItem.update({
-            where: { id: inventoryItem.id },
-            data: { stockLevel: qtyAfter },
-          });
-
-          await tx.inventoryLog.create({
-            data: {
-              inventoryItemId: inventoryItem.id,
-              quantityBefore: qtyBefore,
-              quantityAfter: qtyAfter,
-              changeQty: -qty,
-              type: 'DEDUCTION',
-              reason: `Order placement deduction for: ${menuItem.name}`,
-              userId,
-            },
-          });
         }
 
         const itemSubtotal = menuItem.price * qty;
@@ -233,6 +202,11 @@ const createOrder = async (req, res) => {
           },
         },
       });
+
+      // Deduct inventory only if order status is initialized directly to PAID
+      if (initialStatus === 'PAID') {
+        await deductInventoryForConfirmedOrder(newOrder.id, userId, tx);
+      }
 
       // Generate cryptographically signed dynamic tracking token
       const trackingToken = generateOrderTrackingToken(newOrder.id, newOrder.orderNumber);
@@ -378,43 +352,16 @@ const updateOrderStatus = async (req, res) => {
     }
     // ADMIN has universal permission
 
-    // Execute status transition and stock restore if cancelling/refunding
+    // Execute status transition and stock deduction/restoration inside transaction
     const updatedOrder = await prisma.$transaction(async (tx) => {
-      // If cancelling an order, restore deducted stock
+      // If confirming order (PAID), trigger inventory deduction
+      if (status === 'PAID' && previousStatus !== 'PAID') {
+        await deductInventoryForConfirmedOrder(order.id, userId, tx);
+      }
+
+      // If cancelling/refunding order, trigger stock restoration idempotently
       if (['CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'].includes(status) && !['CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'].includes(previousStatus)) {
-        for (const item of order.orderItems) {
-          await tx.menuItem.update({
-            where: { id: item.menuItemId },
-            data: { stock: { increment: item.quantity } },
-          });
-
-          const inventoryItem = await tx.inventoryItem.findFirst({
-            where: { name: item.nameSnapshot },
-          });
-
-          if (inventoryItem) {
-            const qtyBefore = inventoryItem.stockLevel;
-            const qtyAfter = qtyBefore + item.quantity;
-
-            await tx.inventoryItem.update({
-              where: { id: inventoryItem.id },
-              data: { stockLevel: qtyAfter },
-            });
-
-            await tx.inventoryLog.create({
-              data: {
-                inventoryItemId: inventoryItem.id,
-                quantityBefore: qtyBefore,
-                quantityAfter: qtyAfter,
-                changeQty: item.quantity,
-                type: 'RESTOCK',
-                reason: `Order #${order.orderNumber} ${status} - Stock restored`,
-                orderId: order.id,
-                userId,
-              },
-            });
-          }
-        }
+        await restoreInventoryForOrder(order.id, userId, note || `Order status updated to ${status}`, tx);
       }
 
       const updatePayload = { status };

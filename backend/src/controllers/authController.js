@@ -51,7 +51,7 @@ const register = async (req, res) => {
         password: hashedPassword,
         name: name.trim(),
         role: userRole,
-        branchId: branchId ? parseInt(branchId, 10) : 1,
+        branchId: branchId ? parseInt(branchId, 10) : null,
         isActive: true,
       },
     });
@@ -99,7 +99,7 @@ const login = async (req, res) => {
   try {
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
-      return res.status(400).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     if (user.isActive === false) {
@@ -108,7 +108,7 @@ const login = async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid email or password.' });
+      return res.status(401).json({ error: 'Invalid email or password.' });
     }
 
     const tokens = generateTokens(user);
