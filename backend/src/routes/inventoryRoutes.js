@@ -17,6 +17,13 @@ const {
   getForecast,
   getInventoryAlerts,
   recalculateInventoryForecasts,
+  getReceivings,
+  getReceivingById,
+  createReceiving,
+  confirmReceiving,
+  cancelReceiving,
+  previewImportCSV,
+  previewAiOcrInvoice,
 } = require('../controllers/inventoryController');
 const authMiddleware = require('../middleware/authMiddleware');
 const roleMiddleware = require('../middleware/roleMiddleware');
@@ -32,7 +39,16 @@ router.get('/', getInventoryItems);
 router.post('/', roleMiddleware(['ADMIN', 'VENDOR']), addInventoryItem);
 router.put('/:id', roleMiddleware(['ADMIN', 'VENDOR']), updateInventoryItem);
 
-// Stock In & Adjustments
+// Stock Receiving Workflow
+router.get('/receivings', getReceivings);
+router.get('/receivings/:id', getReceivingById);
+router.post('/receivings', roleMiddleware(['ADMIN', 'VENDOR']), createReceiving);
+router.post('/receivings/:id/receive', roleMiddleware(['ADMIN', 'VENDOR']), confirmReceiving);
+router.post('/receivings/:id/cancel', roleMiddleware(['ADMIN', 'VENDOR']), cancelReceiving);
+router.post('/receivings/import/preview', roleMiddleware(['ADMIN', 'VENDOR']), previewImportCSV);
+router.post('/receivings/ocr-preview', roleMiddleware(['ADMIN', 'VENDOR']), previewAiOcrInvoice);
+
+// Legacy Stock In & Adjustments
 router.post('/stock-in', roleMiddleware(['ADMIN', 'VENDOR']), stockIn);
 router.post('/adjust', roleMiddleware(['ADMIN', 'VENDOR']), adjustStock);
 router.post('/:id/restock', roleMiddleware(['ADMIN', 'VENDOR']), restockItem);

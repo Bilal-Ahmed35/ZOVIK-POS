@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { exportToCSV, printPDFReport } from '../../../utils/exportUtils';
 import api from '../../../services/api';
+import AdminInventoryReceivingView from './AdminInventoryReceivingView';
 
 const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast }) => {
   const [activeTab, setActiveTab] = useState('CATALOG');
@@ -501,118 +502,14 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
         </div>
       )}
 
-      {/* TAB 2: STOCK IN (RECEIVING) */}
+      {/* TAB 2: STOCK IN (RECEIVING WORKFLOW) */}
       {activeTab === 'STOCK_IN' && (
-        <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-6 rounded-2xl shadow-xl max-w-2xl space-y-6">
-          <h3 className="text-base font-extrabold text-[var(--text-main)] font-display flex items-center gap-2">
-            <Truck className="w-5 h-5 text-orange-400" />
-            <span>Stock In / Goods Receipt</span>
-          </h3>
-
-          <form onSubmit={handleStockIn} className="space-y-4 text-xs">
-            <div>
-              <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Select Ingredient *</label>
-              <select
-                required
-                value={stockInItem}
-                onChange={(e) => setStockInItem(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
-              >
-                <option value="">-- Choose Ingredient --</option>
-                {inventory.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name} (Current: {i.stockLevel} {i.unit})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Quantity Received *</label>
-                <input
-                  type="number"
-                  required
-                  step="0.01"
-                  min="0.01"
-                  value={stockInQty}
-                  onChange={(e) => setStockInQty(e.target.value)}
-                  placeholder="e.g. 25"
-                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Unit Cost Price (Rs.)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={stockInCost}
-                  onChange={(e) => setStockInCost(e.target.value)}
-                  placeholder="e.g. 450"
-                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Batch / Invoice No.</label>
-                <input
-                  type="text"
-                  value={stockInBatch}
-                  onChange={(e) => setStockInBatch(e.target.value)}
-                  placeholder="e.g. BATCH-2026-09"
-                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
-                />
-              </div>
-
-              <div>
-                <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Expiry Date</label>
-                <input
-                  type="date"
-                  value={stockInExpiry}
-                  onChange={(e) => setStockInExpiry(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Supplier</label>
-              <select
-                value={stockInSupplier}
-                onChange={(e) => setStockInSupplier(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
-              >
-                <option value="">-- Optional Supplier --</option>
-                {suppliersList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Notes</label>
-              <input
-                type="text"
-                value={stockInNotes}
-                onChange={(e) => setStockInNotes(e.target.value)}
-                placeholder="Purchase Order notes..."
-                className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all shadow-md cursor-pointer"
-            >
-              Confirm Stock Receipt
-            </button>
-          </form>
-        </div>
+        <AdminInventoryReceivingView
+          inventory={inventory}
+          suppliers={suppliersList}
+          onRefresh={onRefresh}
+          showToast={showToast}
+        />
       )}
 
       {/* TAB 3: WASTE & ADJUSTMENTS */}

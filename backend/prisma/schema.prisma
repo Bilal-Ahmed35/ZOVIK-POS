@@ -8,18 +8,19 @@ generator client {
 }
 
 model Branch {
-  id             Int             @id @default(autoincrement())
+  id             Int                  @id @default(autoincrement())
   name           String
   address        String?
   phone          String?
-  isActive       Boolean         @default(true)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  isActive       Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
   tables         Table[]
   users          User[]
   menuItems      MenuItem[]
   inventoryItems InventoryItem[]
   orders         Order[]
+  receivings     InventoryReceiving[]
 }
 
 model Table {
@@ -51,6 +52,7 @@ model User {
   auditLogs     AuditLog[]
   statusChanges OrderStatusHistory[]
   inventoryLogs InventoryLog[]
+  receivings    InventoryReceiving[]
 }
 
 model Session {
@@ -205,17 +207,18 @@ model DemandForecast {
 }
 
 model Supplier {
-  id            Int             @id @default(autoincrement())
-  name          String
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?
-  notes         String?
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id             Int                  @id @default(autoincrement())
+  name           String
+  contactPerson  String?
+  email          String?
+  phone          String?
+  address        String?
+  notes          String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
   inventoryItems InventoryItem[]
-  logs          InventoryLog[]
+  logs           InventoryLog[]
+  receivings     InventoryReceiving[]
 }
 
 model RecipeItem {
@@ -233,49 +236,88 @@ model RecipeItem {
 }
 
 model InventoryItem {
-  id           Int            @id @default(autoincrement())
-  branchId     Int?
-  branch       Branch?        @relation(fields: [branchId], references: [id])
-  name         String
-  category     String         @default("Other")
-  sku          String?
-  stockLevel   Float          @default(0.0)
-  unit         String
-  minThreshold Float          @default(10.0)
-  maxThreshold Float          @default(100.0)
-  costPrice    Float          @default(0.0)
-  expiryDate   DateTime?
-  supplierId   Int?
-  supplier     Supplier?      @relation(fields: [supplierId], references: [id])
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  logs         InventoryLog[]
-  recipeItems  RecipeItem[]
+  id             Int                      @id @default(autoincrement())
+  branchId       Int?
+  branch         Branch?                  @relation(fields: [branchId], references: [id])
+  name           String
+  category       String                   @default("Other")
+  sku            String?
+  stockLevel     Float                    @default(0.0)
+  unit           String
+  minThreshold   Float                    @default(10.0)
+  maxThreshold   Float                    @default(100.0)
+  costPrice      Float                    @default(0.0)
+  expiryDate     DateTime?
+  supplierId     Int?
+  supplier       Supplier?                @relation(fields: [supplierId], references: [id])
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  logs           InventoryLog[]
+  recipeItems    RecipeItem[]
+  receivingItems InventoryReceivingItem[]
 
   @@unique([branchId, name])
 }
 
 model InventoryLog {
-  id              Int           @id @default(autoincrement())
+  id              Int                 @id @default(autoincrement())
   inventoryItemId Int
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
-  type            String        // STOCK_IN, USAGE, WASTAGE, ADJUSTMENT, RESTORATION
-  quantity        Float         @default(0.0)
-  quantityBefore  Float         @default(0.0)
-  quantityAfter   Float         @default(0.0)
-  changeQty       Float         @default(0.0)
+  inventoryItem   InventoryItem       @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+  type            String              // STOCK_IN, USAGE, WASTAGE, ADJUSTMENT, RESTORATION
+  quantity        Float               @default(0.0)
+  quantityBefore  Float               @default(0.0)
+  quantityAfter   Float               @default(0.0)
+  changeQty       Float               @default(0.0)
   cost            Float?
   reason          String?
   orderId         Int?
   orderItemId     Int?
+  receivingId     Int?
+  receiving       InventoryReceiving? @relation(fields: [receivingId], references: [id])
   batchNumber     String?
   expiryDate      DateTime?
   supplierId      Int?
-  supplier        Supplier?     @relation(fields: [supplierId], references: [id])
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id])
   userId          Int?
-  user            User?         @relation(fields: [userId], references: [id])
+  user            User?               @relation(fields: [userId], references: [id])
   createdBy       Int?
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime            @default(now())
+}
+
+model InventoryReceiving {
+  id              Int                      @id @default(autoincrement())
+  receivingNumber String                   @unique // e.g. REC-2026-0001
+  supplierId      Int?
+  supplier        Supplier?                @relation(fields: [supplierId], references: [id])
+  invoiceNumber   String?
+  branchId        Int?
+  branch          Branch?                  @relation(fields: [branchId], references: [id])
+  receivingDate   DateTime                 @default(now())
+  receivedById    Int?
+  receivedBy      User?                    @relation(fields: [receivedById], references: [id])
+  notes           String?
+  status          String                   @default("DRAFT") // DRAFT, RECEIVED, CANCELLED
+  totalCost       Float                    @default(0.0)
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  items           InventoryReceivingItem[]
+  logs            InventoryLog[]
+}
+
+model InventoryReceivingItem {
+  id              Int                @id @default(autoincrement())
+  receivingId     Int
+  receiving       InventoryReceiving @relation(fields: [receivingId], references: [id], onDelete: Cascade)
+  inventoryItemId Int
+  inventoryItem   InventoryItem      @relation(fields: [inventoryItemId], references: [id])
+  quantity        Float
+  unit            String
+  unitCost        Float              @default(0.0)
+  totalCost       Float              @default(0.0)
+  batchNumber     String?
+  expiryDate      DateTime?
+  notes           String?
+  createdAt       DateTime           @default(now())
 }
 
 model EmailOTP {

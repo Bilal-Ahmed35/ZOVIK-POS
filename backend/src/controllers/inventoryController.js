@@ -2,6 +2,8 @@ const { prisma } = require('../config/db');
 const { getInventoryForecast } = require('../services/aiService');
 const { emitToAdmin, emitToVendor } = require('../sockets/socket');
 const { convertUnit } = require('../utils/unitConverter');
+const { parseAndMatchInvoice } = require('../services/aiOcrService');
+const { logAudit } = require('../middleware/auditMiddleware');
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour TTL for cached ML forecasts
 
@@ -952,6 +954,403 @@ const recalculateInventoryForecasts = async (req, res) => {
   }
 };
 
+/**
+ * Get list of stock receiving transactions with optional filters
+ */
+const getReceivings = async (req, res) => {
+  const { status, supplierId, branchId, search } = req.query;
+  try {
+    const where = {};
+    if (status && status !== 'ALL') where.status = status.toUpperCase();
+    if (supplierId) where.supplierId = parseInt(supplierId, 10);
+    if (branchId) where.branchId = parseInt(branchId, 10);
+    if (search) {
+      where.OR = [
+        { receivingNumber: { contains: search, mode: 'insensitive' } },
+        { invoiceNumber: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const receivings = await prisma.inventoryReceiving.findMany({
+      where,
+      include: {
+        supplier: true,
+        branch: true,
+        receivedBy: { select: { id: true, name: true, email: true } },
+        items: {
+          include: { inventoryItem: true }
+        },
+        _count: { select: { items: true } }
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json({ receivings });
+  } catch (error) {
+    console.error('Fetch receivings error:', error);
+    return res.status(500).json({ error: 'Failed to retrieve stock receiving records.' });
+  }
+};
+
+/**
+ * Get single stock receiving transaction details by ID
+ */
+const getReceivingById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const receiving = await prisma.inventoryReceiving.findUnique({
+      where: { id: parseInt(id, 10) },
+      include: {
+        supplier: true,
+        branch: true,
+        receivedBy: { select: { id: true, name: true, email: true } },
+        items: {
+          include: { inventoryItem: true }
+        },
+        logs: {
+          include: { inventoryItem: true }
+        }
+      }
+    });
+
+    if (!receiving) {
+      return res.status(404).json({ error: 'Stock receiving record not found.' });
+    }
+
+    return res.json({ receiving });
+  } catch (error) {
+    console.error('Fetch receiving by ID error:', error);
+    return res.status(500).json({ error: 'Failed to retrieve receiving details.' });
+  }
+};
+
+/**
+ * Create new stock receiving transaction (DRAFT or CONFIRMED RECEIVED)
+ */
+const createReceiving = async (req, res) => {
+  const { supplierId, invoiceNumber, branchId, receivingDate, notes, items, status } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'At least one inventory item is required for stock receiving.' });
+  }
+
+  const isConfirmed = status && status.toUpperCase() === 'RECEIVED';
+  const targetStatus = isConfirmed ? 'RECEIVED' : 'DRAFT';
+
+  try {
+    const year = new Date().getFullYear();
+    const count = await prisma.inventoryReceiving.count();
+    const receivingNumber = `REC-${year}-${String(count + 1).padStart(4, '0')}`;
+
+    const resolvedBranchId = branchId ? parseInt(branchId, 10) : (req.user?.branchId || 1);
+    const resolvedSupplierId = supplierId ? parseInt(supplierId, 10) : null;
+    const resolvedDate = receivingDate ? new Date(receivingDate) : new Date();
+
+    const preparedItems = [];
+    let calculatedTotalCost = 0.0;
+
+    for (const item of items) {
+      const invId = parseInt(item.inventoryItemId, 10);
+      const qty = parseFloat(item.quantity);
+      const cost = item.unitCost !== undefined && item.unitCost !== '' ? parseFloat(item.unitCost) : 0.0;
+
+      if (isNaN(invId) || isNaN(qty) || qty <= 0) {
+        return res.status(400).json({ error: 'All receiving items must specify a valid inventory item and positive quantity.' });
+      }
+
+      const itemTotal = qty * cost;
+      calculatedTotalCost += itemTotal;
+
+      preparedItems.push({
+        inventoryItemId: invId,
+        quantity: qty,
+        unit: item.unit || 'PCS',
+        unitCost: cost,
+        totalCost: itemTotal,
+        batchNumber: item.batchNumber ? String(item.batchNumber).trim() : null,
+        expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+        notes: item.notes ? String(item.notes).trim() : null,
+      });
+    }
+
+    const receiving = await prisma.$transaction(async (tx) => {
+      const newReceiving = await tx.inventoryReceiving.create({
+        data: {
+          receivingNumber,
+          supplierId: resolvedSupplierId,
+          invoiceNumber: invoiceNumber ? String(invoiceNumber).trim() : null,
+          branchId: resolvedBranchId,
+          receivingDate: resolvedDate,
+          receivedById: req.user.id,
+          notes: notes ? String(notes).trim() : null,
+          status: targetStatus,
+          totalCost: calculatedTotalCost,
+          items: {
+            create: preparedItems,
+          },
+        },
+        include: {
+          supplier: true,
+          branch: true,
+          receivedBy: { select: { id: true, name: true, email: true } },
+          items: { include: { inventoryItem: true } },
+        },
+      });
+
+      if (targetStatus === 'RECEIVED') {
+        for (const item of newReceiving.items) {
+          const existingItem = await tx.inventoryItem.findUnique({
+            where: { id: item.inventoryItemId }
+          });
+
+          if (!existingItem) {
+            throw new Error(`Inventory item ID ${item.inventoryItemId} not found.`);
+          }
+
+          const qtyBefore = existingItem.stockLevel;
+          const qtyAfter = qtyBefore + item.quantity;
+          const newCost = item.unitCost > 0 ? item.unitCost : existingItem.costPrice;
+          const newExpiry = item.expiryDate || existingItem.expiryDate;
+
+          await tx.inventoryItem.update({
+            where: { id: existingItem.id },
+            data: {
+              stockLevel: qtyAfter,
+              costPrice: newCost,
+              expiryDate: newExpiry,
+            }
+          });
+
+          await tx.inventoryLog.create({
+            data: {
+              inventoryItemId: existingItem.id,
+              type: 'STOCK_IN',
+              quantity: item.quantity,
+              quantityBefore: qtyBefore,
+              quantityAfter: qtyAfter,
+              changeQty: item.quantity,
+              cost: item.totalCost,
+              reason: `Stock receiving #${newReceiving.receivingNumber} (Inv: ${newReceiving.invoiceNumber || 'N/A'})`,
+              batchNumber: item.batchNumber,
+              expiryDate: item.expiryDate,
+              supplierId: resolvedSupplierId,
+              receivingId: newReceiving.id,
+              userId: req.user.id,
+            }
+          });
+        }
+      }
+
+      return newReceiving;
+    });
+
+    await logAudit({
+      userId: req.user.id,
+      action: isConfirmed ? 'STOCK_RECEIVING_CONFIRMED' : 'STOCK_RECEIVING_DRAFT_CREATED',
+      entity: 'InventoryReceiving',
+      entityId: receiving.id,
+      newValue: { receivingNumber: receiving.receivingNumber, totalCost: receiving.totalCost, status: receiving.status },
+      req
+    });
+
+    if (isConfirmed) {
+      emitToAdmin('inventory:update', { receiving });
+      emitToVendor('inventory:update', { receiving });
+    }
+
+    return res.status(201).json({
+      message: isConfirmed ? 'Stock received successfully and inventory updated.' : 'Draft stock receiving saved successfully.',
+      receiving
+    });
+  } catch (error) {
+    console.error('Create receiving error:', error.message);
+    return res.status(500).json({ error: error.message || 'Failed to create stock receiving record.' });
+  }
+};
+
+/**
+ * Confirm a draft receiving transaction and update inventory atomically
+ */
+const confirmReceiving = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const existingReceiving = await prisma.inventoryReceiving.findUnique({
+      where: { id: parseInt(id, 10) },
+      include: { items: { include: { inventoryItem: true } } }
+    });
+
+    if (!existingReceiving) {
+      return res.status(404).json({ error: 'Stock receiving record not found.' });
+    }
+
+    if (existingReceiving.status === 'RECEIVED') {
+      return res.status(400).json({ error: 'This receiving record has already been confirmed and processed.' });
+    }
+
+    if (existingReceiving.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'Cancelled receiving records cannot be confirmed.' });
+    }
+
+    const updatedReceiving = await prisma.$transaction(async (tx) => {
+      for (const item of existingReceiving.items) {
+        const existingItem = await tx.inventoryItem.findUnique({
+          where: { id: item.inventoryItemId }
+        });
+
+        if (!existingItem) {
+          throw new Error(`Inventory item ID ${item.inventoryItemId} not found.`);
+        }
+
+        const qtyBefore = existingItem.stockLevel;
+        const qtyAfter = qtyBefore + item.quantity;
+        const newCost = item.unitCost > 0 ? item.unitCost : existingItem.costPrice;
+        const newExpiry = item.expiryDate || existingItem.expiryDate;
+
+        await tx.inventoryItem.update({
+          where: { id: existingItem.id },
+          data: {
+            stockLevel: qtyAfter,
+            costPrice: newCost,
+            expiryDate: newExpiry,
+          }
+        });
+
+        await tx.inventoryLog.create({
+          data: {
+            inventoryItemId: existingItem.id,
+            type: 'STOCK_IN',
+            quantity: item.quantity,
+            quantityBefore: qtyBefore,
+            quantityAfter: qtyAfter,
+            changeQty: item.quantity,
+            cost: item.totalCost,
+            reason: `Stock receiving #${existingReceiving.receivingNumber} (Inv: ${existingReceiving.invoiceNumber || 'N/A'})`,
+            batchNumber: item.batchNumber,
+            expiryDate: item.expiryDate,
+            supplierId: existingReceiving.supplierId,
+            receivingId: existingReceiving.id,
+            userId: req.user.id,
+          }
+        });
+      }
+
+      const updated = await tx.inventoryReceiving.update({
+        where: { id: existingReceiving.id },
+        data: {
+          status: 'RECEIVED',
+          receivedById: req.user.id,
+        },
+        include: {
+          supplier: true,
+          branch: true,
+          receivedBy: { select: { id: true, name: true, email: true } },
+          items: { include: { inventoryItem: true } }
+        }
+      });
+
+      return updated;
+    });
+
+    await logAudit({
+      userId: req.user.id,
+      action: 'STOCK_RECEIVING_CONFIRMED',
+      entity: 'InventoryReceiving',
+      entityId: updatedReceiving.id,
+      newValue: { receivingNumber: updatedReceiving.receivingNumber, status: 'RECEIVED' },
+      req
+    });
+
+    emitToAdmin('inventory:update', { receiving: updatedReceiving });
+    emitToVendor('inventory:update', { receiving: updatedReceiving });
+
+    return res.json({
+      message: 'Stock receiving confirmed successfully. Inventory quantities updated.',
+      receiving: updatedReceiving
+    });
+  } catch (error) {
+    console.error('Confirm receiving error:', error.message);
+    return res.status(500).json({ error: error.message || 'Failed to confirm stock receiving.' });
+  }
+};
+
+/**
+ * Cancel a draft stock receiving transaction
+ */
+const cancelReceiving = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const receiving = await prisma.inventoryReceiving.findUnique({
+      where: { id: parseInt(id, 10) }
+    });
+
+    if (!receiving) {
+      return res.status(404).json({ error: 'Stock receiving record not found.' });
+    }
+
+    if (receiving.status === 'RECEIVED') {
+      return res.status(400).json({ error: 'Completed receivings cannot be cancelled.' });
+    }
+
+    const updated = await prisma.inventoryReceiving.update({
+      where: { id: receiving.id },
+      data: { status: 'CANCELLED' }
+    });
+
+    await logAudit({
+      userId: req.user.id,
+      action: 'STOCK_RECEIVING_CANCELLED',
+      entity: 'InventoryReceiving',
+      entityId: updated.id,
+      newValue: { receivingNumber: updated.receivingNumber, status: 'CANCELLED' },
+      req
+    });
+
+    return res.json({ message: 'Stock receiving draft cancelled.', receiving: updated });
+  } catch (error) {
+    console.error('Cancel receiving error:', error);
+    return res.status(500).json({ error: 'Failed to cancel stock receiving.' });
+  }
+};
+
+/**
+ * Parse CSV/Excel upload and match items against inventory catalog
+ */
+const previewImportCSV = async (req, res) => {
+  const { rows, rawText, fileBase64, fileName } = req.body;
+  try {
+    const result = await parseAndMatchInvoice({
+      rawText: rawText || (Array.isArray(rows) ? JSON.stringify(rows) : ''),
+      fileBase64,
+      fileName,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Preview import error:', error);
+    return res.status(500).json({ error: 'Failed to parse import data.' });
+  }
+};
+
+/**
+ * AI / OCR Invoice extraction & item matching preview
+ */
+const previewAiOcrInvoice = async (req, res) => {
+  const { rawText, imageBase64, fileBase64, fileName, supplierName } = req.body;
+  try {
+    const result = await parseAndMatchInvoice({
+      rawText,
+      fileBase64: fileBase64 || imageBase64,
+      fileName,
+      supplierNameHint: supplierName,
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('AI OCR preview error:', error);
+    return res.status(500).json({ error: 'Failed to extract invoice data.' });
+  }
+};
+
 module.exports = {
   getInventorySummary,
   getInventoryItems,
@@ -969,5 +1368,12 @@ module.exports = {
   getInventoryLogs,
   getForecast,
   getInventoryAlerts,
-  recalculateInventoryForecasts
+  recalculateInventoryForecasts,
+  getReceivings,
+  getReceivingById,
+  createReceiving,
+  confirmReceiving,
+  cancelReceiving,
+  previewImportCSV,
+  previewAiOcrInvoice,
 };
