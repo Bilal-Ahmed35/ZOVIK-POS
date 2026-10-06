@@ -40,11 +40,22 @@ async function syncToSupabaseAuth(action, payload) {
   }
 }
 
+const dashboardStatsCache = new Map();
+const DASHBOARD_CACHE_TTL_MS = 15 * 1000; // 15s fast cache
+
 /**
  * Executive Dashboard Analytics with AI ETA accuracy, demand forecasts, and trends
  */
 const getDashboardStats = async (req, res) => {
-  const { period = 'day', branchId } = req.query;
+  const { period = 'day', branchId, refresh } = req.query;
+  const cacheKey = `${period}_${branchId || 'all'}`;
+
+  if (refresh !== 'true' && dashboardStatsCache.has(cacheKey)) {
+    const cached = dashboardStatsCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < DASHBOARD_CACHE_TTL_MS) {
+      return res.json(cached.payload);
+    }
+  }
 
   try {
     const now = new Date();
@@ -276,7 +287,7 @@ const getDashboardStats = async (req, res) => {
 
     const posConfidenceExplanation = `Based on ${totalOrdersCountAllTime} recorded order(s) over ${dateSpanDays} day(s)`;
 
-    return res.json({
+    const payload = {
       period,
       branchId: branchId || 'all',
       metrics: {
@@ -302,7 +313,10 @@ const getDashboardStats = async (req, res) => {
       recentOrders,
       categoryStats,
       topItems,
-    });
+    };
+
+    dashboardStatsCache.set(cacheKey, { timestamp: Date.now(), payload });
+    return res.json(payload);
   } catch (error) {
     console.error('Fetch dashboard stats error:', error);
     return res.status(500).json({ error: 'Failed to retrieve admin dashboard stats.' });

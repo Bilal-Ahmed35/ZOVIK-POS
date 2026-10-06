@@ -5,6 +5,14 @@
  * @param {Array<{key: string, label: string}>} headers - Explicit header definitions
  */
 export const exportToCSV = (filename, data, headers) => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user?.isDemo === true) {
+      alert('🔒 Read-Only Demo Mode: File downloads and export features are disabled for demo accounts. Please log in with a real account to download files.');
+      return;
+    }
+  } catch (_) {}
+
   if (!data || data.length === 0) {
     alert('No data available to export.');
     return;
@@ -41,6 +49,14 @@ export const exportToCSV = (filename, data, headers) => {
  * @param {string} contentHtml - HTML snippet representing report table/content
  */
 export const printPDFReport = (title, contentHtml) => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user?.isDemo === true) {
+      alert('🔒 Read-Only Demo Mode: PDF report exports are disabled for demo accounts. Please log in with a real account to export PDF reports.');
+      return;
+    }
+  } catch (_) {}
+
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
     alert('Please allow popups to export PDF reports.');

@@ -243,6 +243,7 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
 
   // Quick Action Modal State
   const [selectedItemForDetails, setSelectedItemForDetails] = useState(null);
+  const [editingItem, setEditingItem] = useState(null);
   const [selectedItemForAdjustment, setSelectedItemForAdjustment] = useState(null);
   const [itemActionMenuId, setItemActionMenuId] = useState(null);
   
@@ -275,9 +276,39 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
     costPrice: '0',
     stockLevel: '0',
     supplierId: '',
+    sku: '',
+    batchNumber: '',
+    supplierInvoiceNumber: '',
     expiryDate: '',
     notes: '',
   });
+
+  // Unique Batch Number generator helper
+  const generateAutoBatch = () => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const batch = `BATCH-${dateStr}-${rand}`;
+    setNewItem(prev => ({ ...prev, batchNumber: batch }));
+    if (showToast) showToast(`Batch # Generated: ${batch}`, 'info');
+  };
+
+  // Unique Reference generator helper (format: REF-YYYYMMDD-XXXX)
+  const generateAutoSKU = () => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const refNum = `REF-${dateStr}-${rand}`;
+    setNewItem(prev => ({ ...prev, sku: refNum }));
+    if (showToast) showToast(`Internal Reference Generated: ${refNum}`, 'info');
+  };
+
+  // Unique Supplier Invoice # generator helper
+  const generateAutoInvoiceNum = () => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const ms = String(Date.now()).slice(-6);
+    const inv = `INV-${dateStr}-${ms}`;
+    setNewItem(prev => ({ ...prev, supplierInvoiceNumber: inv }));
+    if (showToast) showToast(`Supplier Invoice # Generated: ${inv}`, 'info');
+  };
 
   // Supplier modal
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -475,6 +506,30 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
       fetchReceivings();
     } catch (err) {
       if (showToast) showToast(err.response?.data?.error || 'Failed to add item', 'error');
+    }
+  };
+
+  const handleUpdateItem = async (e) => {
+    e.preventDefault();
+    if (!editingItem) return;
+    try {
+      const payload = {
+        name: editingItem.name,
+        unit: editingItem.unit,
+        category: editingItem.category,
+        minThreshold: parseFloat(editingItem.minThreshold) || 10,
+        maxThreshold: parseFloat(editingItem.maxThreshold) || 100,
+        costPrice: parseFloat(editingItem.costPrice) || 0,
+        sku: editingItem.sku || null,
+        supplierId: editingItem.supplierId ? parseInt(editingItem.supplierId, 10) : null,
+      };
+      await api.put(`/inventory/${editingItem.id}`, payload);
+      if (showToast) showToast(`Updated "${editingItem.name}" in catalog!`);
+      setEditingItem(null);
+      if (onRefresh) onRefresh();
+      fetchSummary();
+    } catch (err) {
+      if (showToast) showToast(err.response?.data?.error || 'Failed to update item', 'error');
     }
   };
 
@@ -971,11 +1026,19 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedItemForDetails(item)}
-                                  className="p-1 rounded-lg bg-[var(--bg-color)] text-[var(--text-muted)] hover:text-[var(--text-main)] cursor-pointer"
-                                  title="View Details"
+                                  onClick={() => setEditingItem(item)}
+                                  className="p-1 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 cursor-pointer border border-orange-500/20"
+                                  title="Edit Catalog Item"
                                 >
-                                  <Eye className="w-4 h-4" />
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteItem(item.id, item.name)}
+                                  className="p-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 cursor-pointer border border-rose-500/20"
+                                  title="Delete Item"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             </td>
@@ -1148,17 +1211,17 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
         />
       )}
 
-      {/* Quick Adjustment Modal */}
-      {selectedItemForAdjustment && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      {/* Quick Adjustment Modal — Portal to document.body for true screen centering */}
+      {selectedItemForAdjustment && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl max-w-md w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-scale-up my-auto">
             <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
               <h3 className="text-base font-black text-[var(--text-main)] flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
                 Adjust Stock: {selectedItemForAdjustment.name}
               </h3>
-              <button onClick={() => setSelectedItemForAdjustment(null)} className="p-1.5 rounded-xl bg-[var(--bg-color)]">
-                <X className="w-5 h-5 text-[var(--text-muted)]" />
+              <button onClick={() => setSelectedItemForAdjustment(null)} className="p-1.5 rounded-xl bg-[var(--bg-color)] hover:bg-[var(--card-bg)] text-[var(--text-muted)] cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1210,25 +1273,26 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
               </div>
 
               <div className="flex justify-end space-x-2 pt-2 border-t border-[var(--border-color)]">
-                <button type="button" onClick={() => setSelectedItemForAdjustment(null)} className="px-4 py-2 rounded-xl bg-[var(--bg-color)] font-bold text-[var(--text-muted)]">Cancel</button>
-                <button type="submit" className="px-5 py-2 rounded-xl bg-amber-600 text-white font-black shadow-md">Save Adjustment</button>
+                <button type="button" onClick={() => setSelectedItemForAdjustment(null)} className="px-4 py-2 rounded-xl bg-[var(--bg-color)] font-bold text-[var(--text-muted)] cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-black shadow-md cursor-pointer">Save Adjustment</button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {/* Item Details Modal */}
-      {selectedItemForDetails && (
-        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+      {/* Item Details Modal — Portal to document.body for true screen centering */}
+      {selectedItemForDetails && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-scale-up my-auto">
             <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
               <div>
                 <h3 className="text-base font-black text-[var(--text-main)]">{selectedItemForDetails.name}</h3>
                 <span className="text-[10px] text-orange-400 font-bold uppercase">{selectedItemForDetails.category || 'General'}</span>
               </div>
-              <button onClick={() => setSelectedItemForDetails(null)} className="p-1.5 rounded-xl bg-[var(--bg-color)]">
-                <X className="w-5 h-5 text-[var(--text-muted)]" />
+              <button onClick={() => setSelectedItemForDetails(null)} className="p-1.5 rounded-xl bg-[var(--bg-color)] hover:bg-[var(--card-bg)] text-[var(--text-muted)] cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1240,11 +1304,166 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
             </div>
 
             <div className="flex justify-end space-x-2 pt-2 border-t border-[var(--border-color)]">
-              <button onClick={() => handleDeleteItem(selectedItemForDetails.id, selectedItemForDetails.name)} className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 font-bold text-xs">Delete Item</button>
-              <button onClick={() => setSelectedItemForDetails(null)} className="px-4 py-2 rounded-xl bg-[var(--bg-color)] font-bold text-xs text-[var(--text-muted)]">Close</button>
+              <button onClick={() => { const item = selectedItemForDetails; setSelectedItemForDetails(null); setEditingItem(item); }} className="px-3 py-2 rounded-xl bg-orange-500/10 text-orange-400 font-bold text-xs cursor-pointer">Edit Item</button>
+              <button onClick={() => handleDeleteItem(selectedItemForDetails.id, selectedItemForDetails.name)} className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-400 font-bold text-xs cursor-pointer">Delete Item</button>
+              <button onClick={() => setSelectedItemForDetails(null)} className="px-4 py-2 rounded-xl bg-[var(--bg-color)] font-bold text-xs text-[var(--text-muted)] cursor-pointer">Close</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Edit Catalog Item Modal */}
+      {editingItem && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl max-w-lg w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-scale-up my-auto">
+            <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
+              <div>
+                <h3 className="text-base font-black text-[var(--text-main)] font-display flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-orange-400" />
+                  Edit Item: {editingItem.name}
+                </h3>
+                <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                  Update item parameters, cost, thresholds, or supplier details.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="p-1.5 rounded-xl bg-[var(--bg-color)] hover:bg-[var(--card-bg)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer border border-[var(--border-color)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateItem} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                  Ingredient Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editingItem.name}
+                  onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                    Unit *
+                  </label>
+                  <select
+                    value={editingItem.unit}
+                    onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
+                  >
+                    <option value="KG">KG</option>
+                    <option value="G">G</option>
+                    <option value="L">L</option>
+                    <option value="ML">ML</option>
+                    <option value="PCS">PCS</option>
+                    <option value="DOZEN">DOZEN</option>
+                    <option value="BOX">BOX</option>
+                    <option value="PACK">PACK</option>
+                    <option value="BOTTLE">BOTTLE</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                    Category *
+                  </label>
+                  <select
+                    value={editingItem.category || 'General'}
+                    onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
+                  >
+                    <option value="General">General</option>
+                    <option value="Meat & Protein">Meat & Protein</option>
+                    <option value="Vegetables">Vegetables</option>
+                    <option value="Dry Goods">Dry Goods</option>
+                    <option value="Spices">Spices</option>
+                    <option value="Sauces & Condiments">Sauces & Condiments</option>
+                    <option value="Dairy">Dairy</option>
+                    <option value="Bakery">Bakery</option>
+                    <option value="Beverages">Beverages</option>
+                    <option value="Cooking Oil">Cooking Oil</option>
+                    <option value="Packaging">Packaging</option>
+                    <option value="Kitchen Supplies">Kitchen Supplies</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                    Cost per Unit (Rs.)
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editingItem.costPrice || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, costPrice: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono text-[var(--text-main)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                    Minimum Stock Alert
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editingItem.minThreshold || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, minThreshold: e.target.value })}
+                    className="w-full px-3 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono text-[var(--text-main)]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                  Supplier
+                </label>
+                <select
+                  value={editingItem.supplierId || ''}
+                  onChange={(e) => setEditingItem({ ...editingItem, supplierId: e.target.value })}
+                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
+                >
+                  <option value="">Select Supplier (Optional)...</option>
+                  {suppliersList.map((sup) => (
+                    <option key={sup.id} value={sup.id}>
+                      {sup.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-[var(--border-color)]">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 py-2.5 rounded-xl bg-[var(--bg-color)] border border-[var(--border-color)] font-bold text-[var(--text-muted)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-black shadow-md cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Add New Item Modal — Portal to document.body for true screen centering */}
@@ -1572,6 +1791,81 @@ const AdminInventoryView = ({ inventory = [], logs = [], onRefresh, showToast })
                     placeholder="0"
                     className="w-full px-3 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono text-[var(--text-main)]"
                   />
+                </div>
+              </div>
+
+              {/* Batch Number, Item SKU / Reference & Supplier Invoice # Generators */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 border-t border-[var(--border-color)]/60">
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px] flex justify-between items-center">
+                    <span>Batch Number</span>
+                    <span className="text-[10px] text-orange-400 font-normal lowercase">(Optional)</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={newItem.batchNumber || ''}
+                      onChange={(e) => setNewItem({ ...newItem, batchNumber: e.target.value })}
+                      placeholder="Click 🔄 to generate..."
+                      className="w-full pl-3 pr-9 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={generateAutoBatch}
+                      title="Generate unique Batch Number"
+                      className="absolute right-2 p-1.5 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center z-10"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px] flex justify-between items-center">
+                    <span>Internal Reference</span>
+                    <span className="text-[10px] text-orange-400 font-normal lowercase">(Optional)</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={newItem.sku || ''}
+                      onChange={(e) => setNewItem({ ...newItem, sku: e.target.value })}
+                      placeholder="Click 🔄 to generate..."
+                      className="w-full pl-3 pr-9 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-orange-400 focus:outline-none focus:border-orange-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={generateAutoSKU}
+                      title="Generate unique Item Reference SKU"
+                      className="absolute right-2 p-1.5 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center z-10"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px] flex justify-between items-center">
+                    <span>Supplier Invoice #</span>
+                    <span className="text-[10px] text-emerald-400 font-normal lowercase">(Optional)</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={newItem.supplierInvoiceNumber || ''}
+                      onChange={(e) => setNewItem({ ...newItem, supplierInvoiceNumber: e.target.value })}
+                      placeholder="Click 🔄 to generate..."
+                      className="w-full pl-3 pr-9 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-emerald-400 focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={generateAutoInvoiceNum}
+                      title="Generate unique Supplier Invoice #"
+                      className="absolute right-2 p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center z-10"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
 

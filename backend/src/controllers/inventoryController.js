@@ -310,6 +310,41 @@ const updateInventoryItem = async (req, res) => {
 };
 
 /**
+ * Delete an inventory item (and related logs/recipes safely)
+ */
+const deleteInventoryItem = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const invId = parseInt(id, 10);
+    const existing = await prisma.inventoryItem.findUnique({
+      where: { id: invId }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Inventory item not found.' });
+    }
+
+    // Clean up dependent records safely in transaction
+    await prisma.$transaction(async (tx) => {
+      await tx.recipeItem.deleteMany({ where: { inventoryItemId: invId } });
+      await tx.inventoryLog.deleteMany({ where: { inventoryItemId: invId } });
+      await tx.inventoryReceivingItem.deleteMany({ where: { inventoryItemId: invId } });
+      await tx.inventoryItem.delete({ where: { id: invId } });
+    });
+
+    emitToAdmin('inventory:delete', { id: invId });
+    emitToVendor('inventory:delete', { id: invId });
+    logAudit(req.user?.id || 1, 'DELETE_ITEM', 'InventoryItem', invId, { name: existing.name });
+
+    return res.json({ message: `Inventory item "${existing.name}" deleted successfully.` });
+  } catch (error) {
+    console.error('Delete inventory item error:', error);
+    return res.status(500).json({ error: 'Failed to delete inventory item.' });
+  }
+};
+
+/**
  * Perform Stock In (Purchase/Delivery receiving)
  */
 const stockIn = async (req, res) => {
@@ -1977,7 +2012,7 @@ Return ONLY a raw JSON array of objects with keys:
 - "reason": brief string explanation`;
 
       const groqRes = await callGroqAPI({
-        model: 'llama-3.3-70b-versatile',
+        model: getGroqModel(),
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.2
       });
@@ -2131,7 +2166,7 @@ const bulkImportPresetRecipes = async (req, res) => {
 };
 
 const updateBatchExpiry = async (req, res) => {
-  const { source, receivingItemId, inventoryItemId, expiryDate, batchNumber } = req.body;
+  const { source, receivingItemId, inventoryItemId, expiryDate, batchNumber, receivingRef, invoiceNumber } = req.body;
 
   try {
     const formattedExpiry = expiryDate ? new Date(expiryDate) : null;
@@ -2162,6 +2197,17 @@ const updateBatchExpiry = async (req, res) => {
           receiving: { include: { supplier: true } }
         }
       });
+
+      // Update parent receiving record invoiceNumber & receivingNumber if updated
+      if (existing.receivingId && (receivingRef || invoiceNumber)) {
+        await prisma.inventoryReceiving.update({
+          where: { id: existing.receivingId },
+          data: {
+            ...(receivingRef ? { receivingNumber: String(receivingRef).trim() } : {}),
+            ...(invoiceNumber ? { invoiceNumber: String(invoiceNumber).trim() } : {}),
+          }
+        }).catch(() => null);
+      }
 
       // Update associated catalog item expiry date if relevant
       if (existing.inventoryItemId) {
@@ -2222,6 +2268,7 @@ module.exports = {
   getInventoryItems,
   addInventoryItem,
   updateInventoryItem,
+  deleteInventoryItem,
   stockIn,
   adjustStock,
   restockItem,

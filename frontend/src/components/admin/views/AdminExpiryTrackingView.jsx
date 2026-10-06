@@ -16,7 +16,8 @@ import {
   Loader2,
   Tag,
   Building2,
-  Coins
+  Coins,
+  RefreshCw
 } from 'lucide-react';
 
 const AdminExpiryTrackingView = ({
@@ -34,7 +35,34 @@ const AdminExpiryTrackingView = ({
   const [selectedBatchDetails, setSelectedBatchDetails] = useState(null);
   const [editExpiryDate, setEditExpiryDate] = useState('');
   const [editBatchNumber, setEditBatchNumber] = useState('');
+  const [editReceivingRef, setEditReceivingRef] = useState('');
+  const [editInvoiceNumber, setEditInvoiceNumber] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Auto-generator helpers
+  const generateAutoBatch = () => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const batch = `BATCH-${dateStr}-${rand}`;
+    setEditBatchNumber(batch);
+    if (showToast) showToast(`Batch # Generated: ${batch}`, 'info');
+  };
+
+  const generateAutoRef = () => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const refNum = `RCV-${dateStr}-${rand}`;
+    setEditReceivingRef(refNum);
+    if (showToast) showToast(`Internal Reference Generated: ${refNum}`, 'info');
+  };
+
+  const generateAutoInvoiceNum = () => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const ms = String(Date.now()).slice(-6);
+    const inv = `INV-${dateStr}-${ms}`;
+    setEditInvoiceNumber(inv);
+    if (showToast) showToast(`Supplier Invoice # Generated: ${inv}`, 'info');
+  };
 
   // Open Edit Modal with Pre-populated details
   const handleOpenViewModal = (record) => {
@@ -52,6 +80,8 @@ const AdminExpiryTrackingView = ({
     }
     setEditExpiryDate(dateStr);
     setEditBatchNumber(record.batchNumber || '');
+    setEditReceivingRef(record.receivingRef || '');
+    setEditInvoiceNumber(record.invoiceNumber || '');
   };
 
   // Live Recalculation preview inside Edit Modal
@@ -75,7 +105,9 @@ const AdminExpiryTrackingView = ({
         receivingItemId: selectedBatchDetails.receivingItemId,
         inventoryItemId: selectedBatchDetails.inventoryItemId,
         expiryDate: editExpiryDate ? editExpiryDate : null,
-        batchNumber: editBatchNumber.trim()
+        batchNumber: editBatchNumber.trim(),
+        receivingRef: editReceivingRef.trim(),
+        invoiceNumber: editInvoiceNumber.trim(),
       };
 
       await api.put('/inventory/batch-expiry', payload);
@@ -128,16 +160,17 @@ const AdminExpiryTrackingView = ({
             source: 'BATCH',
             name: item.inventoryItem?.name || item.name || 'Inventory Item',
             category: item.inventoryItem?.category || item.category || 'General',
-            batchNumber: item.batchNumber || rcv.receivingNumber || rcv.invoiceNumber || `BATCH-${rcv.id}`,
+            batchNumber: item.batchNumber ? String(item.batchNumber).trim() : '',
+            invoiceNumber: rcv.invoiceNumber ? String(rcv.invoiceNumber).trim() : '',
+            receivingRef: rcv.receivingRef || rcv.receivingNumber || '',
             quantity: item.quantity || 0,
             unit: item.unit || item.inventoryItem?.unit || 'PCS',
             costPerUnit: item.unitCost || item.inventoryItem?.costPrice || 0,
             expiryDate: item.expiryDate || null,
             hasExpiry,
             daysLeft,
-            receivingRef: rcv.receivingNumber || rcv.invoiceNumber || `RCV-${rcv.id}`,
             receivingDate: rcv.receivingDate || rcv.createdAt,
-            supplierName: rcv.supplier?.name || item.inventoryItem?.supplier?.name || 'N/A'
+            supplierName: rcv.supplier?.name || item.inventoryItem?.supplier?.name || ''
           });
         });
       }
@@ -164,16 +197,17 @@ const AdminExpiryTrackingView = ({
           source: 'ITEM',
           name: inv.name,
           category: inv.category || 'General',
-          batchNumber: inv.sku || `INV-${inv.id}`,
+          batchNumber: inv.sku ? String(inv.sku).trim() : '',
+          invoiceNumber: '',
+          receivingRef: '',
           quantity: inv.stockLevel,
           unit: inv.unit,
           costPerUnit: inv.costPrice || 0,
           expiryDate: inv.expiryDate || null,
           hasExpiry,
           daysLeft,
-          receivingRef: 'Catalog Initial',
           receivingDate: inv.createdAt,
-          supplierName: inv.supplier?.name || 'N/A',
+          supplierName: inv.supplier?.name || '',
           invItemObj: inv
         });
       }
@@ -399,7 +433,9 @@ const AdminExpiryTrackingView = ({
               <thead className="bg-[var(--bg-color)]/80 text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">
                 <tr>
                   <th className="py-3.5 px-4">Item</th>
+                  <th className="py-3.5 px-4">Internal Ref #</th>
                   <th className="py-3.5 px-4">Batch #</th>
+                  <th className="py-3.5 px-4">Supplier Invoice #</th>
                   <th className="py-3.5 px-4">Quantity</th>
                   <th className="py-3.5 px-4">Expiry Date</th>
                   <th className="py-3.5 px-4">Days Left</th>
@@ -464,19 +500,31 @@ const AdminExpiryTrackingView = ({
                         </div>
                       </td>
 
-                      <td className="py-3 px-4 font-mono text-[11px] text-[var(--text-muted)]">
-                        {r.batchNumber || 'Not Provided'}
+                      {/* Internal Reference # (Optional) */}
+                      <td className="py-3 px-4 font-mono text-[11px] text-amber-400 font-bold">
+                        {r.receivingRef || <span className="text-[var(--text-muted)] italic font-normal">—</span>}
+                      </td>
+
+                      {/* Batch # (Optional) */}
+                      <td className="py-3 px-4 font-mono text-[11px] text-[var(--text-main)] font-semibold">
+                        {r.batchNumber || <span className="text-[var(--text-muted)] italic font-normal">—</span>}
+                      </td>
+
+                      {/* Supplier Invoice # (Optional) */}
+                      <td className="py-3 px-4 font-mono text-[11px] text-purple-400 font-bold">
+                        {r.invoiceNumber || <span className="text-[var(--text-muted)] italic font-normal">—</span>}
                       </td>
 
                       <td className="py-3 px-4 font-mono font-bold text-orange-400">
                         {r.quantity} {r.unit}
                       </td>
 
+                      {/* Expiry Date (Optional) */}
                       <td className="py-3 px-4 font-mono text-[11px] text-[var(--text-main)]">
                         {r.hasExpiry ? (
                           new Date(r.expiryDate).toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' })
                         ) : (
-                          <span className="text-[var(--text-muted)] italic">No Expiry Date</span>
+                          <span className="text-[var(--text-muted)] italic">—</span>
                         )}
                       </td>
 
@@ -541,7 +589,7 @@ const AdminExpiryTrackingView = ({
               </button>
             </div>
 
-            {/* Read-Only Batch Context Grid (Showing all required fields) */}
+            {/* Read-Only Batch Context Grid (Showing all 4 optional tracking fields + supplier details) */}
             <div className="grid grid-cols-2 gap-3 text-xs bg-[var(--bg-color)]/60 border border-[var(--border-color)] p-4 rounded-2xl">
               <div>
                 <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">Quantity & Unit</span>
@@ -553,49 +601,116 @@ const AdminExpiryTrackingView = ({
               <div>
                 <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">Cost per Unit</span>
                 <strong className="text-emerald-400 font-mono text-sm">
-                  {selectedBatchDetails.costPerUnit > 0 ? `Rs. ${selectedBatchDetails.costPerUnit}` : 'N/A'}
+                  {selectedBatchDetails.costPerUnit > 0 ? `Rs. ${selectedBatchDetails.costPerUnit}` : '—'}
                 </strong>
               </div>
 
               <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">Receiving Reference</span>
+                <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">Internal Reference #</span>
                 <strong className="text-amber-400 font-mono">
-                  {selectedBatchDetails.receivingRef}
+                  {selectedBatchDetails.receivingRef || '—'}
+                </strong>
+              </div>
+
+              <div>
+                <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">Supplier Invoice #</span>
+                <strong className="text-purple-400 font-mono">
+                  {selectedBatchDetails.invoiceNumber || '—'}
                 </strong>
               </div>
 
               <div>
                 <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">Supplier</span>
                 <strong className="text-[var(--text-main)]">
-                  {selectedBatchDetails.supplierName}
+                  {selectedBatchDetails.supplierName || '—'}
                 </strong>
               </div>
 
-              <div className="col-span-2">
+              <div>
                 <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">Receiving Date</span>
                 <span className="text-[var(--text-main)] font-medium">
                   {selectedBatchDetails.receivingDate
                     ? new Date(selectedBatchDetails.receivingDate).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
-                    : 'N/A'}
+                    : '—'}
                 </span>
               </div>
             </div>
 
             {/* Editable Fields Section */}
-            <div className="space-y-4 pt-1 border-t border-[var(--border-color)]/60">
+            <div className="space-y-3 pt-1 border-t border-[var(--border-color)]/60">
               
-              {/* Field 1: Batch Number (Editable) */}
+              {/* Field 1: Batch Number with Generator */}
               <div>
-                <label className="block text-[11px] font-extrabold uppercase text-[var(--text-main)] mb-1">
-                  Batch Number
+                <label className="block text-[11px] font-extrabold uppercase text-[var(--text-main)] mb-1 flex justify-between items-center">
+                  <span>Batch Number</span>
+                  <span className="text-[10px] text-orange-400 font-normal lowercase">(Optional)</span>
                 </label>
-                <input
-                  type="text"
-                  value={editBatchNumber}
-                  onChange={(e) => setEditBatchNumber(e.target.value)}
-                  placeholder="Enter batch number..."
-                  className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-bold"
-                />
+                <div className="relative flex items-center">
+                  <input
+                    type="text"
+                    value={editBatchNumber}
+                    onChange={(e) => setEditBatchNumber(e.target.value)}
+                    placeholder="Click 🔄 to generate..."
+                    className="w-full pl-3 pr-9 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={generateAutoBatch}
+                    title="Click to generate a unique Batch Number"
+                    className="absolute right-2 p-1.5 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center z-10"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Field 2 & 3: Internal Ref # & Supplier Invoice # Generators */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-[var(--text-main)] mb-1 flex justify-between items-center">
+                    <span>Internal Reference #</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={editReceivingRef}
+                      onChange={(e) => setEditReceivingRef(e.target.value)}
+                      placeholder="Click 🔄 to generate..."
+                      className="w-full pl-3 pr-9 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={generateAutoRef}
+                      title="Click to generate a unique Internal Reference"
+                      className="absolute right-2 p-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center z-10"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-[var(--text-main)] mb-1 flex justify-between items-center">
+                    <span>Supplier Invoice #</span>
+                  </label>
+                  <div className="relative flex items-center">
+                    <input
+                      type="text"
+                      value={editInvoiceNumber}
+                      onChange={(e) => setEditInvoiceNumber(e.target.value)}
+                      placeholder="Click 🔄 to generate..."
+                      className="w-full pl-3 pr-9 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-purple-400 focus:outline-none focus:border-purple-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={generateAutoInvoiceNum}
+                      title="Click to generate a unique Supplier Invoice #"
+                      className="absolute right-2 p-1.5 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center z-10"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Field 2: Expiry Date (Editable) */}

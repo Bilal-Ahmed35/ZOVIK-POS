@@ -30,7 +30,8 @@ import {
   ChevronUp,
   Info,
   CheckCircle,
-  Sparkle
+  Sparkle,
+  PackageCheck,
 } from 'lucide-react';
 import api from '../../../services/api';
 import { exportToCSV } from '../../../utils/exportUtils';
@@ -90,7 +91,8 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
   const [receivingsList, setReceivingsList] = useState([]);
   
   // Header Form State
-  const [receivingRef, setReceivingRef] = useState(''); // Internal System Reference RCV-YYYYMMDD-XXX
+  // Internal Reference starts BLANK -- user must click icon to generate
+  const [receivingRef, setReceivingRef] = useState(''); // RCV-YYYYMMDD-XXX
   const [supplierId, setSupplierId] = useState('');
   const [supplierInvoiceNumber, setSupplierInvoiceNumber] = useState(''); // External Supplier Invoice # (e.g. INV-45892)
   const [branchId, setBranchId] = useState('1');
@@ -143,23 +145,34 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
   const [historySearch, setHistorySearch] = useState('');
   const [historyStatusFilter, setHistoryStatusFilter] = useState('ALL');
 
-  // Generate dynamic internal receiving reference RCV-YYYYMMDD-XXX
-  const generateAutoRef = async () => {
-    try {
-      const res = await api.get('/inventory/receivings/next-ref');
-      if (res.data?.reference) {
-        setReceivingRef(res.data.reference);
-      }
-    } catch (err) {
-      const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      setReceivingRef(`RCV-${dateStr}-001`);
-    }
+  const [refClickSeq, setRefClickSeq] = useState(0);
+
+  // Generate unique Internal Reference -- instant date + unique sequence generator
+  const generateAutoRef = () => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const newRef = `RCV-${dateStr}-${rand}`;
+    setReceivingRef(newRef);
+    if (showToast) showToast(`Internal Reference Generated: ${newRef}`, 'info');
   };
 
-  // Generate Auto-Reference on Mount and Reset
-  useEffect(() => {
-    generateAutoRef();
-  }, []);
+  // Generate unique Supplier Invoice # -- timestamp millisecond suffix ensures uniqueness
+  const generateAutoInvoiceNum = () => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const ms = String(Date.now()).slice(-6);
+    const newInv = `INV-${dateStr}-${ms}`;
+    setSupplierInvoiceNumber(newInv);
+    if (showToast) showToast(`Supplier Invoice # Generated: ${newInv}`, 'info');
+  };
+
+  // Generate unique Batch Number for receiving row
+  const generateAutoBatchForRow = (index) => {
+    const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const batch = `BATCH-${dateStr}-${rand}`;
+    handleRowChange(index, 'batchNumber', batch);
+    if (showToast) showToast(`Batch # Generated: ${batch}`, 'info');
+  };
 
   const fetchReceivings = async () => {
     setLoading(true);
@@ -181,27 +194,83 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
     }
   }, [subTab, historyStatusFilter]);
 
-  // Download Easy 4-Column Excel Template
+  // Download Comprehensive Stock Excel Template (All item columns included; Ref & Invoice # excluded)
   const handleDownloadEasyExcelTemplate = () => {
     const templateData = [
-      { 'Item Name': 'Potatoes', 'Quantity': 50, 'Unit': 'KG', 'Cost per Unit': 120 },
-      { 'Item Name': 'Onions', 'Quantity': 30, 'Unit': 'KG', 'Cost per Unit': 100 },
-      { 'Item Name': 'Chicken Fillet', 'Quantity': 25, 'Unit': 'KG', 'Cost per Unit': 650 },
-      { 'Item Name': 'Burger Buns', 'Quantity': 100, 'Unit': 'PCS', 'Cost per Unit': 45 },
-      { 'Item Name': 'Cooking Oil', 'Quantity': 10, 'Unit': 'L', 'Cost per Unit': 550 }
+      {
+        'Item Name': 'Potatoes',
+        'Category': 'Vegetables',
+        'Unit': 'KG',
+        'Quantity Received': 50,
+        'Cost per Unit': 120,
+        'Batch Number': 'BATCH-2026-001',
+        'Expiry Date': '2026-12-31',
+        'Notes': 'Fresh local market stock',
+        'Minimum Stock': 10
+      },
+      {
+        'Item Name': 'Onions',
+        'Category': 'Vegetables',
+        'Unit': 'KG',
+        'Quantity Received': 30,
+        'Cost per Unit': 100,
+        'Batch Number': 'BATCH-2026-002',
+        'Expiry Date': '2026-11-15',
+        'Notes': 'Grade A onions',
+        'Minimum Stock': 10
+      },
+      {
+        'Item Name': 'Chicken Fillet',
+        'Category': 'Meat & Protein',
+        'Unit': 'KG',
+        'Quantity Received': 25,
+        'Cost per Unit': 650,
+        'Batch Number': 'BATCH-CHIK-109',
+        'Expiry Date': '2026-10-20',
+        'Notes': 'Fresh boneless chicken',
+        'Minimum Stock': 5
+      },
+      {
+        'Item Name': 'Burger Buns',
+        'Category': 'Bakery',
+        'Unit': 'PCS',
+        'Quantity Received': 100,
+        'Cost per Unit': 45,
+        'Batch Number': 'BATCH-BUN-88',
+        'Expiry Date': '2026-10-12',
+        'Notes': 'Fresh sesame buns',
+        'Minimum Stock': 20
+      },
+      {
+        'Item Name': 'Cooking Oil',
+        'Category': 'Sauces & Condiments',
+        'Unit': 'L',
+        'Quantity Received': 10,
+        'Cost per Unit': 550,
+        'Batch Number': 'BATCH-OIL-301',
+        'Expiry Date': '2027-06-30',
+        'Notes': 'Canola cooking oil 1L',
+        'Minimum Stock': 5
+      }
     ];
 
-    exportToCSV('Easy_Stock_Receiving_Template.csv', templateData, [
+    exportToCSV('Stock_Receiving_Template.csv', templateData, [
       { key: 'Item Name', label: 'Item Name' },
-      { key: 'Quantity', label: 'Quantity' },
+      { key: 'Category', label: 'Category' },
       { key: 'Unit', label: 'Unit' },
-      { key: 'Cost per Unit', label: 'Cost per Unit' }
+      { key: 'Quantity Received', label: 'Quantity Received' },
+      { key: 'Cost per Unit', label: 'Cost per Unit' },
+      { key: 'Batch Number', label: 'Batch Number' },
+      { key: 'Expiry Date', label: 'Expiry Date' },
+      { key: 'Notes', label: 'Notes' },
+      { key: 'Minimum Stock', label: 'Minimum Stock' }
     ]);
 
     if (showToast) {
-      showToast('Downloaded Easy Excel Format template!');
+      showToast('Downloaded Full Excel Format Template!');
     }
   };
+
 
   // Calculate grand total cost across item rows
   const calculatedGrandTotal = useMemo(() => {
@@ -258,8 +327,8 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
         searchTerm: invItem.name,
         showSearchDropdown: false,
         unit: invItem.unit || 'KG',
-        unitCost: invItem.costPrice || 0,
-        isUnmatched: false
+        unitCost: updated[index].unitCost || invItem.costPrice || 0, // keep existing cost if already set
+        isUnmatched: false  // clear unmatched flag once user selects catalog item
       };
       return updated;
     });
@@ -288,38 +357,57 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
       const reader = new FileReader();
       reader.onload = async (e) => {
         try {
-          const res = await api.post('/inventory/receivings/import/preview', {
-            fileBase64: e.target.result,
-            fileName: file.name
-          });
+          // For CSV send as rawText, for xlsx/xls send as base64
+          const payload = ext === 'csv'
+            ? { rawText: e.target.result, fileName: file.name }
+            : { fileBase64: e.target.result, fileName: file.name };
+
+          const res = await api.post('/inventory/receivings/import/preview', payload);
 
           if (res.data) {
             const rawMatched = res.data.matchedItems || [];
             const rawUnmatched = res.data.unmatchedItems || [];
             
-            // Map rows and combine duplicate items with exact same cost
+            // Map rows and combine duplicate items by inventoryItemId (or name+cost)
             const rowMap = new Map();
             const processRow = (raw, isMatched) => {
+              // Use inventoryItemId as key for matched items to avoid duplicates
+              const itemId = raw.inventoryItemId ? String(raw.inventoryItemId) : null;
               const nameKey = (raw.name || raw.matchedName || raw.rawName || '').toLowerCase().trim();
-              const unitKey = normalizeUnit(raw.unit || raw.systemUnit);
               const costKey = parseFloat(raw.unitCost) || 0;
-              const mapId = `${nameKey}_${costKey}`;
+              const mapId = itemId ? `id_${itemId}` : `${nameKey}_${costKey}`;
 
               if (rowMap.has(mapId)) {
+                // Merge: add quantities for same item
                 const existing = rowMap.get(mapId);
                 existing.quantity = parseFloat(existing.quantity) + (parseFloat(raw.quantity) || 0);
               } else {
+                const unitKey = normalizeUnit(raw.unit || raw.systemUnit);
+                let expiryStr = '';
+                if (raw.expiryDate) {
+                  try {
+                    expiryStr = new Date(raw.expiryDate).toISOString().split('T')[0];
+                  } catch (_) {
+                    expiryStr = String(raw.expiryDate);
+                  }
+                }
+                const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+                const rowRand = Math.floor(1000 + Math.random() * 9000);
+                const autoBatch = (raw.batchNumber && String(raw.batchNumber).trim() !== '')
+                  ? String(raw.batchNumber).trim()
+                  : `BATCH-${dateStr}-${rowRand}`;
+
                 rowMap.set(mapId, {
-                  inventoryItemId: raw.inventoryItemId ? String(raw.inventoryItemId) : '',
-                  searchTerm: raw.name || raw.matchedName || raw.rawName,
+                  inventoryItemId: itemId || '',
+                  searchTerm: raw.name || raw.matchedName || raw.rawName || '',
                   showSearchDropdown: false,
                   quantity: parseFloat(raw.quantity) || 1,
                   unit: unitKey,
                   unitCost: costKey,
-                  batchNumber: raw.batchNumber || '',
-                  expiryDate: raw.expiryDate ? new Date(raw.expiryDate).toISOString().split('T')[0] : '',
+                  batchNumber: autoBatch,
+                  expiryDate: expiryStr,
                   notes: '',
-                  showMoreDetails: !!(raw.batchNumber || raw.expiryDate),
+                  showMoreDetails: true,
                   isAiDetected: false,
                   confidence: raw.confidence || 0.9,
                   isUnmatched: !isMatched
@@ -333,17 +421,34 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
             const newRows = Array.from(rowMap.values());
 
             if (newRows.length === 0) {
-              if (showToast) showToast('No valid items found in the Excel file.', 'error');
+              if (showToast) showToast('No valid items found in the file.', 'error');
             } else {
               setReceivingRows(newRows);
               setReceivingMethod('MANUAL'); // Switch to Review Stock screen
+
+              // Auto-generate Header Reference and Invoice # if empty
+              const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+              if (!receivingRef) {
+                const randRef = Math.floor(1000 + Math.random() * 9000);
+                setReceivingRef(`RCV-${dateStr}-${randRef}`);
+              }
+              if (!supplierInvoiceNumber) {
+                const ms = String(Date.now()).slice(-6);
+                setSupplierInvoiceNumber(`INV-${dateStr}-${ms}`);
+              }
+              const matchedCount = newRows.filter(r => !r.isUnmatched).length;
+              const unmatchedCount = newRows.filter(r => r.isUnmatched).length;
               if (showToast) {
-                showToast(`Processed ${newRows.length} items from Excel file into Review Stock!`);
+                const msg = unmatchedCount > 0
+                  ? `Imported ${newRows.length} items: ${matchedCount} matched ✓, ${unmatchedCount} need manual selection.`
+                  : `All ${newRows.length} items matched and imported! Review below.`;
+                showToast(msg, unmatchedCount > 0 ? 'warning' : 'success');
               }
             }
           }
         } catch (err) {
-          if (showToast) showToast('Failed to parse Excel file contents.', 'error');
+          console.error('Excel import error:', err);
+          if (showToast) showToast('Failed to parse the file. Please check the format and try again.', 'error');
         } finally {
           setParsingCsv(false);
         }
@@ -353,7 +458,7 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
       else reader.readAsDataURL(file);
     } catch (err) {
       setParsingCsv(false);
-      if (showToast) showToast('Error reading uploaded Excel file.', 'error');
+      if (showToast) showToast('Error reading uploaded file.', 'error');
     }
   };
 
@@ -397,22 +502,31 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
             }
 
             // Extract item rows with AI badges
-            const rawMatched = res.data.matchedItems || [];
-            const rawUnmatched = res.data.unmatchedItems || [];
-
             const newRows = [];
+            const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
+
             const processOcrItem = (item, isMatched) => {
+              let expiryStr = '';
+              if (item.expiryDate) {
+                try { expiryStr = new Date(item.expiryDate).toISOString().split('T')[0]; }
+                catch (_) { expiryStr = String(item.expiryDate); }
+              }
+              const rowRand = Math.floor(1000 + Math.random() * 9000);
+              const autoBatch = (item.batchNumber && String(item.batchNumber).trim() !== '')
+                ? String(item.batchNumber).trim()
+                : `BATCH-${dateStr}-${rowRand}`;
+
               newRows.push({
                 inventoryItemId: item.inventoryItemId ? String(item.inventoryItemId) : '',
-                searchTerm: item.matchedName || item.name || item.rawName || item.rawScannedName,
+                searchTerm: item.matchedName || item.name || item.rawName || item.rawScannedName || '',
                 showSearchDropdown: false,
                 quantity: parseFloat(item.quantity) || 1,
                 unit: normalizeUnit(item.unit || item.systemUnit),
                 unitCost: parseFloat(item.unitCost) || 0,
-                batchNumber: item.batchNumber || '',
-                expiryDate: item.expiryDate ? new Date(item.expiryDate).toISOString().split('T')[0] : '',
+                batchNumber: autoBatch,
+                expiryDate: expiryStr,
                 notes: '',
-                showMoreDetails: !!(item.batchNumber || item.expiryDate),
+                showMoreDetails: true,
                 isAiDetected: true,
                 confidence: item.confidence || 0.85,
                 isUnmatched: !isMatched
@@ -426,9 +540,26 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
               setReceivingRows(newRows);
               setShowOcrModal(false);
               setReceivingMethod('MANUAL'); // Direct to unified Review Stock
-              if (showToast) {
-                showToast(`AI extracted ${newRows.length} items from invoice for review!`);
+
+              // Auto-generate Header Reference & Supplier Invoice Number if empty
+              if (!receivingRef) {
+                const randRef = Math.floor(1000 + Math.random() * 9000);
+                setReceivingRef(`RCV-${dateStr}-${randRef}`);
               }
+              if (!supplierInvoiceNumber) {
+                const ms = String(Date.now()).slice(-6);
+                setSupplierInvoiceNumber(`INV-${dateStr}-${ms}`);
+              }
+              const matchedCount = rawMatched.length;
+              const unmatchedCount = rawUnmatched.length;
+              if (showToast) {
+                const msg = unmatchedCount > 0
+                  ? `AI extracted ${newRows.length} items: ${matchedCount} matched, ${unmatchedCount} need manual catalog selection.`
+                  : `AI extracted all ${newRows.length} items. Review and confirm below.`;
+                showToast(msg, unmatchedCount > 0 ? 'warning' : 'success');
+              }
+            } else {
+              if (showToast) showToast('AI could not extract any items from this invoice. Please try a clearer image.', 'error');
             }
           }
         } catch (err) {
@@ -528,7 +659,8 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
     setAiDetectedInvoiceNumber('');
     setAiDetectedInvoiceTotal(null);
     setNotes('');
-    generateAutoRef();
+    setReceivingRef('');
+    setRefClickSeq(0);
     setReceivingRows([
       {
         inventoryItemId: '',
@@ -570,7 +702,7 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-[var(--card-bg)] p-4 sm:p-5 rounded-3xl border border-[var(--border-color)] shadow-sm">
         <div>
           <h2 className="text-xl font-black text-[var(--text-main)] font-display flex items-center gap-2.5">
-            <span className="p-2 rounded-2xl bg-orange-500/10 text-orange-400">📥</span>
+            <span className="p-2 rounded-2xl bg-orange-500/10 text-orange-400"><PackageCheck className="w-5 h-5" /></span>
             Receive Stock
           </h2>
           <p className="text-xs text-[var(--text-muted)] mt-0.5">
@@ -681,8 +813,8 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
                   <label className="block text-[11px] font-black uppercase text-[var(--text-muted)] tracking-wider">
                     1. Choose Receiving Method
                   </label>
-                  <span className="text-[10px] text-orange-400 font-semibold">
-                    ✨ All methods use the same smart review & validation system
+                  <span className="text-[10px] text-orange-400 font-semibold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 inline" /> All methods use the same smart review & validation system
                   </span>
                 </div>
 
@@ -824,33 +956,34 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
                   
                   {/* Internal Receiving Reference (Dynamic DB Sequence) */}
                   <div>
-                    <label className="block font-extrabold text-[var(--text-main)] uppercase mb-1.5 tracking-wider text-[10px] flex justify-between">
+                    <label className="block font-extrabold text-[var(--text-main)] uppercase mb-1.5 tracking-wider text-[10px] flex justify-between items-center">
                       <span>Internal Reference *</span>
                       <span className="text-[10px] text-orange-400 font-normal lowercase">Auto-generated</span>
                     </label>
-                    <div className="relative">
+                    <div className="relative flex items-center">
                       <input
                         type="text"
-                        readOnly
                         value={receivingRef}
-                        className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-orange-400 cursor-not-allowed opacity-90"
+                        onChange={(e) => setReceivingRef(e.target.value)}
+                        placeholder="Click 🔄 icon to generate..."
+                        className="w-full pl-3.5 pr-9 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-orange-400 focus:outline-none focus:border-orange-500"
                       />
                       <button
                         type="button"
-                        onClick={generateAutoRef}
-                        title="Refresh internal reference counter"
-                        className="absolute right-2 top-2 p-1 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 text-[10px] font-bold"
+                        onClick={() => generateAutoRef()}
+                        title="Click to generate a new unique Internal Reference number"
+                        className="absolute right-2 p-1.5 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center z-10"
                       >
-                        🔄
+                        <RefreshCw className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
                   {/* Supplier Dropdown */}
                   <div>
-                    <label className="block font-extrabold text-[var(--text-main)] uppercase mb-1.5 tracking-wider text-[10px] flex justify-between">
+                    <label className="block font-extrabold text-[var(--text-main)] uppercase mb-1.5 tracking-wider text-[10px] flex justify-between items-center">
                       <span>Supplier</span>
-                      {aiDetectedSupplier && <span className="text-[10px] text-purple-400 font-normal">✨ AI Detected</span>}
+                      {aiDetectedSupplier && <span className="text-[10px] text-purple-400 font-normal flex items-center gap-1"><Sparkles className="w-3 h-3 inline" /> AI Detected</span>}
                     </label>
                     <select
                       value={supplierId}
@@ -868,17 +1001,31 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
 
                   {/* Supplier Invoice # */}
                   <div>
-                    <label className="block font-extrabold text-[var(--text-main)] uppercase mb-1.5 tracking-wider text-[10px] flex justify-between">
+                    <label className="block font-extrabold text-[var(--text-main)] uppercase mb-1.5 tracking-wider text-[10px] flex justify-between items-center">
                       <span>Supplier Invoice #</span>
-                      {aiDetectedInvoiceNumber && <span className="text-[10px] text-purple-400 font-normal">✨ AI Detected</span>}
+                      {aiDetectedInvoiceNumber ? (
+                        <span className="text-[10px] text-purple-400 font-normal flex items-center gap-1"><Sparkles className="w-3 h-3 inline" /> AI Detected</span>
+                      ) : (
+                        <span className="text-[10px] text-emerald-400 font-normal lowercase">(Optional)</span>
+                      )}
                     </label>
-                    <input
-                      type="text"
-                      value={supplierInvoiceNumber}
-                      onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
-                      placeholder="Not Provided (e.g. INV-45892)"
-                      className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
-                    />
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        value={supplierInvoiceNumber}
+                        onChange={(e) => setSupplierInvoiceNumber(e.target.value)}
+                        placeholder="Not Provided (e.g. INV-45892)"
+                        className="w-full pl-3.5 pr-9 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={generateAutoInvoiceNum}
+                        title="Auto-generate unique Supplier Invoice #"
+                        className="absolute right-2 p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Branch */}
@@ -955,6 +1102,21 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
                   </button>
                 </div>
 
+                {/* Unmatched items warning banner */}
+                {receivingRows.some(r => r.isUnmatched && !r.inventoryItemId) && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs">
+                      <span className="font-black text-amber-400">
+                        {receivingRows.filter(r => r.isUnmatched && !r.inventoryItemId).length} item(s) need catalog selection.
+                      </span>
+                      <span className="text-[var(--text-muted)] ml-1">
+                        These were not automatically matched. Click the search field and select the correct catalog item.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
                 {/* List of Stacked Item Cards */}
                 <div className="space-y-4">
                   {receivingRows.map((row, index) => {
@@ -986,9 +1148,16 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
                                 type="text"
                                 value={row.searchTerm}
                                 onFocus={() => handleRowChange(index, 'showSearchDropdown', true)}
+                                onBlur={() => {
+                                  setTimeout(() => {
+                                    handleRowChange(index, 'showSearchDropdown', false);
+                                  }, 250);
+                                }}
                                 onChange={(e) => {
                                   const val = e.target.value;
                                   handleRowChange(index, 'searchTerm', val);
+                                  handleRowChange(index, 'inventoryItemId', ''); // clear match when typing
+                                  handleRowChange(index, 'isUnmatched', true);
                                   handleRowChange(index, 'showSearchDropdown', true);
 
                                   const exactMatch = inventory.find(i => i.name.toLowerCase().trim() === val.toLowerCase().trim());
@@ -996,8 +1165,12 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
                                     handleSelectItem(index, exactMatch);
                                   }
                                 }}
-                                placeholder="Search or select catalog item..."
-                                className="w-full pl-8 pr-3 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
+                                placeholder={row.isUnmatched && row.searchTerm ? `"${row.searchTerm}" – select catalog item...` : 'Search or select catalog item...'}
+                                className={`w-full pl-8 pr-3 py-2 bg-[var(--card-bg)] border rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none ${
+                                  row.isUnmatched && !row.inventoryItemId
+                                    ? 'border-amber-500/60 focus:border-amber-500'
+                                    : 'border-[var(--border-color)] focus:border-orange-500'
+                                }`}
                               />
                               <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-[var(--text-muted)]" />
 
@@ -1033,6 +1206,7 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
                                       <button
                                         key={item.id}
                                         type="button"
+                                        onMouseDown={(e) => e.preventDefault()}
                                         onClick={() => handleSelectItem(index, item)}
                                         className="w-full text-left px-3 py-2 hover:bg-orange-500/10 transition-colors flex items-center justify-between cursor-pointer"
                                       >
@@ -1055,17 +1229,17 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
                           <div className="flex items-center space-x-2 self-end sm:self-auto">
                             {row.isAiDetected && (
                               <span className="px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-400 text-[9px] font-black uppercase tracking-wider border border-purple-500/30 flex items-center gap-1">
-                                ✨ AI Detected
+                                <Sparkles className="w-3 h-3" /> AI Detected
                               </span>
                             )}
 
                             {row.isUnmatched ? (
-                              <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-wider border border-amber-500/30">
-                                ⚠️ Needs Matching
+                              <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase tracking-wider border border-amber-500/30 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" /> Needs Matching
                               </span>
                             ) : selectedInvItem ? (
-                              <span className="px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-500/20">
-                                ✓ Ready ({selectedInvItem.category || 'General'})
+                              <span className="px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase tracking-wider border border-emerald-500/20 flex items-center gap-1">
+                                <Check className="w-3 h-3" /> Ready ({selectedInvItem.category || 'General'})
                               </span>
                             ) : null}
 
@@ -1152,50 +1326,47 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
                           <div className="flex items-center gap-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-semibold">
                             <Info className="w-3.5 h-3.5 shrink-0" />
                             <span>
-                              Cost changed — Catalog cost: <strong>Rs. {selectedInvItem.costPrice} / {selectedInvItem.unit}</strong> ➔ Received cost: <strong>Rs. {row.unitCost} / {row.unit}</strong>
+                              Cost changed â€” Catalog cost: <strong>Rs. {selectedInvItem.costPrice} / {selectedInvItem.unit}</strong> âž” Received cost: <strong>Rs. {row.unitCost} / {row.unit}</strong>
                             </span>
                           </div>
                         )}
 
-                        {/* Collapsible Details (Batch & Expiry) */}
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => handleRowChange(index, 'showMoreDetails', !row.showMoreDetails)}
-                            className="text-[10px] font-bold text-orange-400 hover:underline flex items-center gap-1 cursor-pointer"
-                          >
-                            {row.showMoreDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                            <span>{row.showMoreDetails ? 'Hide Batch & Expiry' : 'More Details (Batch #, Expiry Date — Optional)'}</span>
-                          </button>
-
-                          {row.showMoreDetails && (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-[var(--border-color)]/50">
-                              <div>
-                                <label className="block font-extrabold text-[var(--text-muted)] uppercase mb-1 text-[9px]">
-                                  Batch Number (Optional)
-                                </label>
-                                <input
-                                  type="text"
-                                  value={row.batchNumber}
-                                  onChange={(e) => handleRowChange(index, 'batchNumber', e.target.value)}
-                                  placeholder="Not Provided"
-                                  className="w-full px-3 py-1.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-mono text-[var(--text-main)]"
-                                />
-                              </div>
-
-                              <div>
-                                <label className="block font-extrabold text-[var(--text-muted)] uppercase mb-1 text-[9px]">
-                                  Expiry Date (Optional)
-                                </label>
-                                <input
-                                  type="date"
-                                  value={row.expiryDate}
-                                  onChange={(e) => handleRowChange(index, 'expiryDate', e.target.value)}
-                                  className="w-full px-3 py-1.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-mono text-[var(--text-main)] cursor-pointer"
-                                />
-                              </div>
+                        {/* Always Visible Batch Number & Expiry Date */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[var(--border-color)]/50">
+                          <div>
+                            <label className="block font-extrabold text-[var(--text-muted)] uppercase mb-1 text-[9px] flex justify-between items-center">
+                              <span>Batch Number (Optional)</span>
+                            </label>
+                            <div className="relative flex items-center">
+                              <input
+                                type="text"
+                                value={row.batchNumber || ''}
+                                onChange={(e) => handleRowChange(index, 'batchNumber', e.target.value)}
+                                placeholder="Click 🔄 to generate..."
+                                className="w-full pl-3 pr-8 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-mono text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-semibold"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => generateAutoBatchForRow(index)}
+                                title="Click to generate a unique Batch Number"
+                                className="absolute right-1.5 p-1 rounded-lg bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 text-xs font-bold transition-all cursor-pointer flex items-center justify-center z-10"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
                             </div>
-                          )}
+                          </div>
+
+                          <div>
+                            <label className="block font-extrabold text-[var(--text-muted)] uppercase mb-1 text-[9px]">
+                              Expiry Date (Optional)
+                            </label>
+                            <input
+                              type="date"
+                              value={row.expiryDate || ''}
+                              onChange={(e) => handleRowChange(index, 'expiryDate', e.target.value)}
+                              className="w-full px-3 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-mono text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer font-semibold"
+                            />
+                          </div>
                         </div>
                       </div>
                     );
@@ -1270,13 +1441,13 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
         </div>
       )}
 
-      {/* Confirmation Modal — Confirm Stock Receiving? */}
+      {/* Confirmation Modal â€” Confirm Stock Receiving? */}
       {showConfirmModal && (
         <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up">
             <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3">
               <h3 className="text-base font-black text-[var(--text-main)] font-display flex items-center gap-2">
-                <span className="p-1.5 rounded-xl bg-orange-500/10 text-orange-400">📦</span>
+                <span className="p-1.5 rounded-xl bg-orange-500/10 text-orange-400">ðŸ“¦</span>
                 Confirm Stock Receiving
               </h3>
               <button onClick={() => setShowConfirmModal(false)} className="p-1.5 rounded-xl bg-[var(--bg-color)]">
@@ -1560,3 +1731,5 @@ const AdminInventoryReceivingView = ({ inventory = [], suppliers = [], onRefresh
 };
 
 export default AdminInventoryReceivingView;
+
+

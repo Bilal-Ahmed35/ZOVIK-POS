@@ -862,19 +862,23 @@ const AdminRecipeBuilderView = ({ inventory = [], onRefresh, showToast, onOpenAd
                 </div>
 
                 {/* Dropdown Suggestions */}
-                {showIngredientDropdown && ingredientSearch.trim().length > 0 && (
-                  <div className="absolute z-50 left-0 right-0 mt-1 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-2xl max-h-52 overflow-y-auto divide-y divide-[var(--border-color)]">
+                {showIngredientDropdown && (
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-[var(--border-color)]">
                     {(() => {
                       const q = ingredientSearch.toLowerCase().trim();
-                      const matches = inventory.filter(i =>
-                        i.name.toLowerCase().includes(q) ||
-                        (i.category && i.category.toLowerCase().includes(q))
-                      );
+                      const existingIds = editorIngredients.map(i => i.inventoryItemId);
+                      const matches = inventory.filter(i => {
+                        const notMapped = !existingIds.includes(i.id);
+                        if (!q) return notMapped;
+                        const nameMatch = i.name.toLowerCase().includes(q);
+                        const catMatch = i.category && i.category.toLowerCase().includes(q);
+                        return notMapped && (nameMatch || catMatch);
+                      });
 
                       if (matches.length === 0) {
                         return (
                           <div className="p-3.5 text-center text-[var(--text-muted)] text-[11px]">
-                            No inventory item matching "{ingredientSearch}".
+                            {q ? `No inventory item matching "${ingredientSearch}".` : 'All catalog ingredients are already added to this recipe.'}
                           </div>
                         );
                       }

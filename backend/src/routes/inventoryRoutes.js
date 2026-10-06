@@ -5,6 +5,7 @@ const {
   getInventoryItems,
   addInventoryItem,
   updateInventoryItem,
+  deleteInventoryItem,
   stockIn,
   adjustStock,
   restockItem,
@@ -45,6 +46,7 @@ router.get('/summary', getInventorySummary);
 router.get('/', getInventoryItems);
 router.post('/', roleMiddleware(['ADMIN', 'VENDOR']), addInventoryItem);
 router.put('/:id', roleMiddleware(['ADMIN', 'VENDOR']), updateInventoryItem);
+router.delete('/:id', roleMiddleware(['ADMIN', 'VENDOR']), deleteInventoryItem);
 
 // Stock Receiving Workflow
 router.get('/receivings', getReceivings);
