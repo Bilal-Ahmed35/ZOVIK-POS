@@ -53,28 +53,24 @@ const emitToUser = (userId, event, data) => {
     if (userId !== undefined && userId !== null) {
       io.to(`customer-orders-${userId}`).emit(event, data);
     }
-    io.emit(event, data);
   }
 };
 
 const emitToVendor = (event, data) => {
   if (io) {
     io.to('vendors').emit(event, data);
-    io.emit(event, data);
   }
 };
 
 const emitToKitchen = (event, data) => {
   if (io) {
     io.to('kitchens').emit(event, data);
-    io.emit(event, data);
   }
 };
 
 const emitToAdmin = (event, data) => {
   if (io) {
     io.to('admins').emit(event, data);
-    io.emit(event, data);
   }
 };
 

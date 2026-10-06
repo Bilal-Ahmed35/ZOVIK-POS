@@ -1,6 +1,7 @@
 const express = require('express');
 const {
   getInventorySummary,
+  getSmartAIInsights,
   getInventoryItems,
   addInventoryItem,
   updateInventoryItem,
@@ -11,19 +12,25 @@ const {
   saveRecipeForMenuItem,
   getRecipeMargins,
   getExpiringItems,
+  updateBatchExpiry,
   getSuppliers,
   createSupplier,
+  updateSupplier,
+  deleteSupplier,
   getInventoryLogs,
   getForecast,
   getInventoryAlerts,
   recalculateInventoryForecasts,
   getReceivings,
+  generateReceivingRef,
   getReceivingById,
   createReceiving,
   confirmReceiving,
   cancelReceiving,
   previewImportCSV,
   previewAiOcrInvoice,
+  suggestRecipeForMenuItem,
+  bulkImportPresetRecipes,
 } = require('../controllers/inventoryController');
 const authMiddleware = require('../middleware/authMiddleware');
 const roleMiddleware = require('../middleware/roleMiddleware');
@@ -41,6 +48,7 @@ router.put('/:id', roleMiddleware(['ADMIN', 'VENDOR']), updateInventoryItem);
 
 // Stock Receiving Workflow
 router.get('/receivings', getReceivings);
+router.get('/receivings/next-ref', generateReceivingRef);
 router.get('/receivings/:id', getReceivingById);
 router.post('/receivings', roleMiddleware(['ADMIN', 'VENDOR']), createReceiving);
 router.post('/receivings/:id/receive', roleMiddleware(['ADMIN', 'VENDOR']), confirmReceiving);
@@ -55,17 +63,24 @@ router.post('/:id/restock', roleMiddleware(['ADMIN', 'VENDOR']), restockItem);
 
 // Recipes & Margins
 router.get('/recipes/margins', getRecipeMargins);
+router.post('/recipes/ai-suggest', roleMiddleware(['ADMIN', 'VENDOR']), suggestRecipeForMenuItem);
+router.post('/recipes/import-presets', roleMiddleware(['ADMIN', 'VENDOR']), bulkImportPresetRecipes);
 router.get('/recipes/:menuItemId', getRecipeForMenuItem);
 router.post('/recipes/:menuItemId', roleMiddleware(['ADMIN', 'VENDOR']), saveRecipeForMenuItem);
 
 // Expiry & Suppliers
 router.get('/expiring', getExpiringItems);
+router.put('/batch-expiry', roleMiddleware(['ADMIN', 'VENDOR']), updateBatchExpiry);
+router.put('/expiring', roleMiddleware(['ADMIN', 'VENDOR']), updateBatchExpiry);
 router.get('/suppliers', getSuppliers);
 router.post('/suppliers', roleMiddleware(['ADMIN', 'VENDOR']), createSupplier);
+router.put('/suppliers/:id', roleMiddleware(['ADMIN', 'VENDOR']), updateSupplier);
+router.delete('/suppliers/:id', roleMiddleware(['ADMIN', 'VENDOR']), deleteSupplier);
 
 // Logs & AI Forecasting
 router.get('/logs', getInventoryLogs);
 router.get('/alerts', getInventoryAlerts);
+router.get('/ai-insights', getSmartAIInsights);
 router.post('/recalculate-forecasts', roleMiddleware(['ADMIN', 'VENDOR']), recalculateInventoryForecasts);
 router.get('/:id/forecast', getForecast);
 

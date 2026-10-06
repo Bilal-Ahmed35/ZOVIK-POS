@@ -1,0 +1,1052 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import api from '../../../services/api';
+import {
+  Utensils,
+  Search,
+  Plus,
+  Edit3,
+  Copy,
+  Trash2,
+  AlertTriangle,
+  CheckCircle2,
+  Sparkles,
+  RefreshCw,
+  Clock,
+  X,
+  ArrowRight,
+  DollarSign,
+  SlidersHorizontal
+} from 'lucide-react';
+
+/**
+ * Standard Unit Converter Helper (matches backend unitConverter.js)
+ */
+const convertUnit = (qty, fromUnit, toUnit) => {
+  const amount = Number(qty);
+  if (isNaN(amount) || amount <= 0) return 0;
+
+  const f = (fromUnit || 'PCS').toUpperCase();
+  const t = (toUnit || 'PCS').toUpperCase();
+
+  if (f === t) return amount;
+
+  // Weight (KG <-> G)
+  if (['KG', 'KILOGRAM'].includes(f) && ['G', 'GRAM', 'GRAMS'].includes(t)) return amount * 1000;
+  if (['G', 'GRAM', 'GRAMS'].includes(f) && ['KG', 'KILOGRAM'].includes(t)) return amount / 1000;
+
+  // Volume (L <-> ML)
+  if (['L', 'LITER'].includes(f) && ['ML', 'MILLILITER'].includes(t)) return amount * 1000;
+  if (['ML', 'MILLILITER'].includes(f) && ['L', 'LITER'].includes(t)) return amount / 1000;
+
+  // Count (DOZEN <-> PCS)
+  if (f === 'DOZEN' && ['PCS', 'PC'].includes(t)) return amount * 12;
+  if (['PCS', 'PC'].includes(f) && t === 'DOZEN') return amount / 12;
+
+  return amount;
+};
+
+const AdminRecipeBuilderView = ({ inventory = [], onRefresh, showToast, onOpenAddIngredientModal }) => {
+  // Main state
+  const [menuItems, setMenuItems] = useState([]);
+  const [recipesMap, setRecipesMap] = useState({}); // menuItemId -> array of recipeItems
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Modal / Editor State
+  const [activeEditorItem, setActiveEditorItem] = useState(null); // Selected MenuItem object
+  const [editorIngredients, setEditorIngredients] = useState([]); // [{ inventoryItemId, quantity, unit, isAiSuggested }]
+  const [yieldText, setYieldText] = useState('1 Serving');
+  const [prepInstructions, setPrepInstructions] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [recipeHistory, setRecipeHistory] = useState([]);
+
+  // Ingredient Selector inside Editor
+  const [ingredientSearch, setIngredientSearch] = useState('');
+  const [showIngredientDropdown, setShowIngredientDropdown] = useState(false);
+
+  // Duplicate Modal State
+  const [duplicateSourceItem, setDuplicateSourceItem] = useState(null);
+  const [duplicateTargetId, setDuplicateTargetId] = useState('');
+
+  // Fetch menu items & recipes
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [menuRes, marginsRes] = await Promise.all([
+        api.get('/menu'),
+        api.get('/inventory/recipes/margins')
+      ]);
+
+      const items = menuRes.data?.items || (Array.isArray(menuRes.data) ? menuRes.data : []);
+      setMenuItems(items);
+
+      // Fetch recipe detail for items
+      const map = {};
+      await Promise.all(
+        items.map(async (m) => {
+          try {
+            const res = await api.get(`/inventory/recipes/${m.id}`);
+            if (res.data?.menuItem?.recipeItems) {
+              map[m.id] = res.data.menuItem.recipeItems.map(r => ({
+                inventoryItemId: r.inventoryItemId,
+                quantity: r.quantity,
+                unit: r.unit || r.inventoryItem?.unit || 'PCS',
+                invItem: r.inventoryItem
+              }));
+            } else {
+              map[m.id] = [];
+            }
+          } catch {
+            map[m.id] = [];
+          }
+        })
+      );
+      setRecipesMap(map);
+    } catch (err) {
+      console.error('Failed to load recipe builder data:', err);
+      if (showToast) showToast('Failed to load menu items and recipes', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Compute Categories dynamically from POS Menu Items
+  const categories = useMemo(() => {
+    const set = new Set();
+    menuItems.forEach(item => {
+      if (item.category) set.add(item.category);
+    });
+    return Array.from(set).sort();
+  }, [menuItems]);
+
+  // Recipe calculation helpers
+  const calculateItemRecipeCost = (mId) => {
+    const ings = recipesMap[mId] || [];
+    if (!ings.length) return 0;
+    return ings.reduce((sum, r) => {
+      const inv = inventory.find(i => i.id === r.inventoryItemId) || r.invItem;
+      if (!inv || !inv.costPrice) return sum;
+      const convertedQty = convertUnit(r.quantity, r.unit, inv.unit);
+      return sum + (convertedQty * (inv.costPrice || 0));
+    }, 0);
+  };
+
+  const getItemStatus = (mId) => {
+    const ings = recipesMap[mId] || [];
+    if (!ings || ings.length === 0) return 'Draft';
+    const missing = ings.some(r => !inventory.some(i => i.id === r.inventoryItemId));
+    if (missing) return 'Missing Items';
+    const invalidQty = ings.some(r => !r.quantity || parseFloat(r.quantity) <= 0);
+    if (invalidQty) return 'Invalid';
+    return 'Ready';
+  };
+
+  // Filtered Menu Items
+  const filteredMenuItems = useMemo(() => {
+    return menuItems.filter(item => {
+      const q = searchQuery.toLowerCase().trim();
+      const ings = recipesMap[item.id] || [];
+      const ingNames = ings.map(r => {
+        const inv = inventory.find(i => i.id === r.inventoryItemId) || r.invItem;
+        return inv?.name?.toLowerCase() || '';
+      }).join(' ');
+
+      const matchesSearch = !q ||
+        item.name.toLowerCase().includes(q) ||
+        (item.category && item.category.toLowerCase().includes(q)) ||
+        ingNames.includes(q);
+
+      const matchesCategory = selectedCategory === 'ALL' || item.category === selectedCategory;
+
+      const status = getItemStatus(item.id);
+      const matchesStatus = statusFilter === 'ALL' || status === statusFilter;
+
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+  }, [menuItems, recipesMap, inventory, searchQuery, selectedCategory, statusFilter]);
+
+  // Summary Metrics
+  const summary = useMemo(() => {
+    let totalItems = menuItems.length;
+    let readyCount = 0;
+    let missingCount = 0;
+    let draftCount = 0;
+    let totalFoodCostSum = 0;
+    let countedWithRecipe = 0;
+
+    menuItems.forEach(item => {
+      const status = getItemStatus(item.id);
+      if (status === 'Ready') readyCount++;
+      else if (status === 'Missing Items') missingCount++;
+      else draftCount++;
+
+      const cost = calculateItemRecipeCost(item.id);
+      if (cost > 0 && item.price > 0) {
+        const fc = (cost / item.price) * 100;
+        totalFoodCostSum += fc;
+        countedWithRecipe++;
+      }
+    });
+
+    const avgFoodCost = countedWithRecipe > 0 ? (totalFoodCostSum / countedWithRecipe).toFixed(1) : '0';
+
+    return { totalItems, readyCount, missingCount, draftCount, avgFoodCost };
+  }, [menuItems, recipesMap, inventory]);
+
+  // Open Recipe Editor
+  const handleOpenEditor = (item) => {
+    setActiveEditorItem(item);
+    const existing = recipesMap[item.id] || [];
+    setEditorIngredients(existing.map(r => ({
+      inventoryItemId: r.inventoryItemId,
+      quantity: r.quantity,
+      unit: r.unit,
+      isAiSuggested: false
+    })));
+    setYieldText(item.unit || '1 Serving');
+    setPrepInstructions(item.description ? `Standard prep for ${item.name}.` : '');
+    setIngredientSearch('');
+    setShowIngredientDropdown(false);
+  };
+
+  // Add ingredient to editor list
+  const handleAddIngredientToEditor = (invItem) => {
+    if (editorIngredients.some(i => i.inventoryItemId === invItem.id)) {
+      if (showToast) showToast(`"${invItem.name}" is already in this recipe!`, 'info');
+      return;
+    }
+    setEditorIngredients(prev => [
+      ...prev,
+      {
+        inventoryItemId: invItem.id,
+        quantity: invItem.unit === 'KG' ? 0.15 : (invItem.unit === 'G' ? 150 : 1),
+        unit: invItem.unit || 'PCS',
+        isAiSuggested: false
+      }
+    ]);
+    setIngredientSearch('');
+    setShowIngredientDropdown(false);
+  };
+
+  // AI Suggest Ingredients
+  const handleAiSuggest = async () => {
+    if (!activeEditorItem) return;
+    setIsAiLoading(true);
+    try {
+      const res = await api.post('/inventory/recipes/ai-suggest', { menuItemId: activeEditorItem.id });
+      const suggestions = res.data?.suggestions || [];
+      if (suggestions.length === 0) {
+        if (showToast) showToast('No new inventory matches found for AI suggestions.', 'info');
+        return;
+      }
+
+      // Merge suggestions into current editor without overwriting existing
+      let addedCount = 0;
+      setEditorIngredients(prev => {
+        const updated = [...prev];
+        suggestions.forEach(s => {
+          if (!updated.some(existing => existing.inventoryItemId === s.inventoryItemId)) {
+            updated.push({
+              inventoryItemId: s.inventoryItemId,
+              quantity: s.quantity,
+              unit: s.unit,
+              isAiSuggested: true
+            });
+            addedCount++;
+          }
+        });
+        return updated;
+      });
+
+      if (showToast) showToast(`AI suggested ${addedCount} matching inventory items!`, 'success');
+    } catch (err) {
+      console.error('AI suggest error:', err);
+      if (showToast) showToast('Failed to generate AI recipe suggestions.', 'error');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  // Save Recipe
+  const handleSaveRecipe = async (e) => {
+    if (e) e.preventDefault();
+    if (!activeEditorItem) return;
+
+    // Validate quantities
+    const invalid = editorIngredients.some(i => !i.quantity || parseFloat(i.quantity) <= 0);
+    if (invalid) {
+      if (showToast) showToast('Please enter valid quantities for all ingredients.', 'error');
+      return;
+    }
+
+    try {
+      const payload = editorIngredients.map(i => ({
+        inventoryItemId: i.inventoryItemId,
+        quantity: parseFloat(i.quantity),
+        unit: i.unit
+      }));
+
+      await api.post(`/inventory/recipes/${activeEditorItem.id}`, { ingredients: payload });
+      if (showToast) showToast(`Recipe saved & activated for ${activeEditorItem.name}!`, 'success');
+
+      // Update local history
+      setRecipeHistory(prev => [
+        {
+          date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          itemName: activeEditorItem.name,
+          count: payload.length
+        },
+        ...prev.slice(0, 4)
+      ]);
+
+      setActiveEditorItem(null);
+      loadData();
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Save recipe failed:', err);
+      if (showToast) showToast(err.response?.data?.error || 'Failed to save recipe.', 'error');
+    }
+  };
+
+  // Bulk Import Presets
+  const handleImportPresets = async () => {
+    try {
+      const res = await api.post('/inventory/recipes/import-presets');
+      if (showToast) showToast(res.data?.message || 'Recipe presets imported successfully!', 'success');
+      loadData();
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Import presets error:', err);
+      if (showToast) showToast('Failed to import recipe presets.', 'error');
+    }
+  };
+
+  // Duplicate Recipe Handler
+  const handleConfirmDuplicate = async () => {
+    if (!duplicateSourceItem || !duplicateTargetId) return;
+    const sourceIngs = recipesMap[duplicateSourceItem.id] || [];
+    if (!sourceIngs.length) {
+      if (showToast) showToast('Source item has no recipe ingredients to duplicate.', 'error');
+      return;
+    }
+
+    try {
+      const payload = sourceIngs.map(i => ({
+        inventoryItemId: i.inventoryItemId,
+        quantity: i.quantity,
+        unit: i.unit
+      }));
+
+      await api.post(`/inventory/recipes/${duplicateTargetId}`, { ingredients: payload });
+      const targetObj = menuItems.find(m => m.id === parseInt(duplicateTargetId, 10));
+      if (showToast) showToast(`Duplicated recipe to ${targetObj?.name || 'target item'}!`, 'success');
+
+      setDuplicateSourceItem(null);
+      setDuplicateTargetId('');
+      loadData();
+    } catch (err) {
+      console.error('Duplicate recipe error:', err);
+      if (showToast) showToast('Failed to duplicate recipe.', 'error');
+    }
+  };
+
+  // Calculations for current editor modal
+  const editorCalculatedCost = useMemo(() => {
+    return editorIngredients.reduce((sum, ing) => {
+      const inv = inventory.find(i => i.id === ing.inventoryItemId);
+      if (!inv || !inv.costPrice) return sum;
+      const convertedQty = convertUnit(ing.quantity, ing.unit, inv.unit);
+      return sum + (convertedQty * (inv.costPrice || 0));
+    }, 0);
+  }, [editorIngredients, inventory]);
+
+  const editorFoodCostPercent = useMemo(() => {
+    if (!activeEditorItem || !activeEditorItem.price || activeEditorItem.price <= 0) return 0;
+    return ((editorCalculatedCost / activeEditorItem.price) * 100).toFixed(1);
+  }, [editorCalculatedCost, activeEditorItem]);
+
+  return (
+    <div className="space-y-6">
+      
+      {/* 1. Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[var(--card-bg)] border border-[var(--border-color)] p-5 sm:p-6 rounded-3xl shadow-xl">
+        <div>
+          <h2 className="text-xl font-black text-[var(--text-main)] font-display flex items-center gap-2.5">
+            <span className="p-2 rounded-2xl bg-orange-500/10 text-orange-400">📖</span>
+            Recipe Builder
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            Create recipes that automatically connect menu items to inventory ingredients.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => {
+              if (menuItems.length > 0) handleOpenEditor(menuItems[0]);
+            }}
+            disabled={menuItems.length === 0}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>New Recipe</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 2. KPI Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-[var(--card-bg)]/60 border border-[var(--border-color)] p-4 rounded-2xl space-y-1">
+          <div className="flex justify-between items-center text-[var(--text-muted)]">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider">Total Menu Items</span>
+            <Utensils className="w-4 h-4 text-orange-400" />
+          </div>
+          <div className="text-2xl font-black text-[var(--text-main)] font-mono">{summary.totalItems}</div>
+          <div className="text-[10px] text-[var(--text-muted)]">POS saleable items</div>
+        </div>
+
+        <div className="bg-[var(--card-bg)]/60 border border-[var(--border-color)] p-4 rounded-2xl space-y-1">
+          <div className="flex justify-between items-center text-[var(--text-muted)]">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider">Ready Recipes</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="text-2xl font-black text-emerald-400 font-mono">{summary.readyCount}</div>
+          <div className="text-[10px] text-[var(--text-muted)]">Active for auto-deduction</div>
+        </div>
+
+        <div className="bg-[var(--card-bg)]/60 border border-[var(--border-color)] p-4 rounded-2xl space-y-1">
+          <div className="flex justify-between items-center text-[var(--text-muted)]">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider">Missing Items</span>
+            <AlertTriangle className="w-4 h-4 text-rose-400" />
+          </div>
+          <div className="text-2xl font-black text-rose-400 font-mono">{summary.missingCount}</div>
+          <div className="text-[10px] text-[var(--text-muted)]">Requires inventory mapping</div>
+        </div>
+
+        <div className="bg-[var(--card-bg)]/60 border border-[var(--border-color)] p-4 rounded-2xl space-y-1">
+          <div className="flex justify-between items-center text-[var(--text-muted)]">
+            <span className="text-[10px] font-extrabold uppercase tracking-wider">Avg Food Cost %</span>
+            <Sparkles className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-2xl font-black text-amber-400 font-mono">{summary.avgFoodCost}%</div>
+          <div className="text-[10px] text-[var(--text-muted)]">Target: 30% - 35%</div>
+        </div>
+      </div>
+
+      {/* 3. Search & Filter Bar */}
+      <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] p-4 rounded-2xl flex flex-col md:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full md:w-80">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search recipe, menu item, ingredient..."
+            className="w-full pl-9 pr-4 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-bold"
+          />
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-[var(--text-muted)]" />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Category Filter */}
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-bold">
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>Category:</span>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="bg-[var(--bg-color)] border border-[var(--border-color)] text-[var(--text-main)] text-xs rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-orange-500 cursor-pointer"
+            >
+              <option value="ALL">All Categories ({menuItems.length})</option>
+              {categories.map((cat, i) => (
+                <option key={i} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-1.5 text-xs text-[var(--text-muted)] font-bold">
+            <span>Status:</span>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="bg-[var(--bg-color)] border border-[var(--border-color)] text-[var(--text-main)] text-xs rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-orange-500 cursor-pointer"
+            >
+              <option value="ALL">All Status</option>
+              <option value="Ready">Ready</option>
+              <option value="Missing Items">Missing Items</option>
+              <option value="Draft">Draft</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Recipe Table / List */}
+      <div className="bg-[var(--card-bg)]/40 border border-[var(--border-color)] rounded-3xl overflow-hidden shadow-xl">
+        {loading ? (
+          <div className="p-12 text-center text-[var(--text-muted)] text-xs space-y-2">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-orange-400" />
+            <p>Loading POS menu items & recipes...</p>
+          </div>
+        ) : menuItems.length === 0 ? (
+          <div className="p-12 text-center text-[var(--text-muted)] text-xs space-y-2">
+            <Utensils className="w-8 h-8 mx-auto text-[var(--text-muted)] opacity-50" />
+            <p className="font-bold text-[var(--text-main)] text-sm">No menu items found</p>
+            <p className="text-[var(--text-muted)]">Add menu items in POS Menu Items section first to create recipes.</p>
+          </div>
+        ) : filteredMenuItems.length === 0 ? (
+          <div className="p-12 text-center text-[var(--text-muted)] text-xs space-y-2">
+            <Utensils className="w-8 h-8 mx-auto text-[var(--text-muted)] opacity-50" />
+            <p className="font-bold text-[var(--text-main)]">No recipes found matching your filters.</p>
+            <p>Try searching for another term or select "All Categories".</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs divide-y divide-[var(--border-color)]">
+              <thead className="bg-[var(--bg-color)]/80 text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">
+                <tr>
+                  <th className="py-3.5 px-4">Menu Item</th>
+                  <th className="py-3.5 px-4">Category</th>
+                  <th className="py-3.5 px-4 text-center">Ingredients</th>
+                  <th className="py-3.5 px-4">Selling Price</th>
+                  <th className="py-3.5 px-4">Recipe Cost</th>
+                  <th className="py-3.5 px-4">Food Cost %</th>
+                  <th className="py-3.5 px-4">Status</th>
+                  <th className="py-3.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-color)] font-medium text-[var(--text-main)]">
+                {filteredMenuItems.map((item) => {
+                  const ings = recipesMap[item.id] || [];
+                  const cost = calculateItemRecipeCost(item.id);
+                  const foodCostPct = item.price > 0 && cost > 0 ? ((cost / item.price) * 100).toFixed(1) : null;
+                  const status = getItemStatus(item.id);
+
+                  return (
+                    <tr key={item.id} className="hover:bg-[var(--bg-color)]/50 transition-colors">
+                      {/* Item Name */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center font-bold text-orange-400 shrink-0">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover rounded-xl" />
+                            ) : (
+                              '🍔'
+                            )}
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-[var(--text-main)] block">{item.name}</span>
+                            {item.description && (
+                              <span className="text-[10px] text-[var(--text-muted)] line-clamp-1 max-w-xs font-normal">
+                                {item.description}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Category */}
+                      <td className="py-3 px-4">
+                        <span className="px-2.5 py-1 rounded-lg bg-[var(--bg-color)] text-[10px] font-bold text-[var(--text-muted)] border border-[var(--border-color)]">
+                          {item.category || 'General'}
+                        </span>
+                      </td>
+
+                      {/* Ingredients Count */}
+                      <td className="py-3 px-4 text-center font-mono font-bold">
+                        <span className={`px-2 py-0.5 rounded text-[11px] ${ings.length > 0 ? 'bg-orange-500/10 text-orange-400' : 'bg-slate-500/10 text-[var(--text-muted)]'}`}>
+                          {ings.length} Items
+                        </span>
+                      </td>
+
+                      {/* Selling Price */}
+                      <td className="py-3 px-4 font-mono font-bold text-[var(--text-main)]">
+                        Rs. {item.price}
+                      </td>
+
+                      {/* Recipe Cost */}
+                      <td className="py-3 px-4 font-mono font-bold text-amber-400">
+                        {cost > 0 ? `Rs. ${cost.toFixed(2)}` : '—'}
+                      </td>
+
+                      {/* Food Cost % */}
+                      <td className="py-3 px-4 font-mono font-bold">
+                        {foodCostPct ? (
+                          <span className={`px-2 py-0.5 rounded text-[11px] ${parseFloat(foodCostPct) > 40 ? 'text-rose-400 bg-rose-500/10' : 'text-emerald-400 bg-emerald-500/10'}`}>
+                            {foodCostPct}%
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3 px-4">
+                        {status === 'Ready' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                            <CheckCircle2 className="w-3 h-3" /> Ready
+                          </span>
+                        )}
+                        {status === 'Missing Items' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full">
+                            <AlertTriangle className="w-3 h-3" /> Missing Items
+                          </span>
+                        )}
+                        {status === 'Draft' && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-[var(--text-muted)] bg-slate-500/10 border border-[var(--border-color)] px-2 py-0.5 rounded-full">
+                            <Clock className="w-3 h-3" /> Draft
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3 px-4 text-right space-x-1.5">
+                        <button
+                          onClick={() => setDuplicateSourceItem(item)}
+                          title="Duplicate Recipe to Another Menu Item"
+                          className="p-1.5 rounded-lg bg-[var(--bg-color)] hover:bg-[var(--card-bg)] text-[var(--text-muted)] hover:text-orange-400 border border-[var(--border-color)] transition-colors cursor-pointer"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
+                          onClick={() => handleOpenEditor(item)}
+                          className="px-3 py-1.5 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border border-orange-500/20 font-bold text-[11px] transition-all cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>{status === 'Missing Items' ? 'Fix' : 'Edit'}</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 5. FULL RECIPE EDITOR MODAL — Portal to document.body for true screen centering */}
+      {activeEditorItem && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl max-w-3xl w-full p-5 sm:p-6 space-y-4 shadow-2xl animate-scale-up my-auto max-h-[92vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-3.5 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center text-xl">
+                  🍕
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-[var(--text-main)] font-display flex items-center gap-2">
+                    Recipe: {activeEditorItem.name}
+                  </h3>
+                  <div className="flex items-center gap-3 text-[11px] text-[var(--text-muted)] mt-0.5">
+                    <span>Category: <strong className="text-[var(--text-main)]">{activeEditorItem.category || 'General'}</strong></span>
+                    <span>•</span>
+                    <span>Selling Price: <strong className="text-orange-400">Rs. {activeEditorItem.price}</strong></span>
+                    {activeEditorItem.prepTime && (
+                      <>
+                        <span>•</span>
+                        <span>Prep Time: <strong>{activeEditorItem.prepTime} min</strong></span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setActiveEditorItem(null)}
+                className="p-2 rounded-xl bg-[var(--bg-color)] hover:bg-[var(--card-bg)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors border border-[var(--border-color)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Content */}
+            <form onSubmit={handleSaveRecipe} className="space-y-4 text-xs overflow-y-auto pr-1 flex-1">
+              
+              {/* Menu Item Step Selector */}
+              <div className="bg-[var(--bg-color)]/60 border border-[var(--border-color)] p-3 rounded-2xl space-y-2">
+                <label className="block font-extrabold text-[var(--text-main)] uppercase tracking-wider text-[10px]">
+                  Step 1 — Menu Item Selection
+                </label>
+                <select
+                  value={activeEditorItem.id}
+                  onChange={(e) => {
+                    const sel = menuItems.find(m => m.id === parseInt(e.target.value, 10));
+                    if (sel) handleOpenEditor(sel);
+                  }}
+                  className="w-full px-3.5 py-2 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer"
+                >
+                  {menuItems.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} — Rs.{m.price} ({m.category || 'General'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Ingredients Header + AI Suggest Button */}
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <h4 className="font-black text-[var(--text-main)] uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <span>📦 Recipe Ingredients</span>
+                    <span className="text-[10px] text-[var(--text-muted)] font-normal lowercase">({editorIngredients.length} ingredients mapped)</span>
+                  </h4>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleAiSuggest}
+                  disabled={isAiLoading}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600/20 to-pink-600/20 hover:from-purple-600/30 hover:to-pink-600/30 text-purple-300 border border-purple-500/30 font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-purple-500/10"
+                >
+                  <Sparkles className={`w-3.5 h-3.5 text-pink-400 ${isAiLoading ? 'animate-spin' : ''}`} />
+                  <span>{isAiLoading ? 'AI Analyzing...' : '✨ AI Suggest Ingredients'}</span>
+                </button>
+              </div>
+
+              {/* Ingredients Table */}
+              <div className="bg-[var(--bg-color)]/40 border border-[var(--border-color)] rounded-2xl overflow-hidden divide-y divide-[var(--border-color)]">
+                {editorIngredients.length === 0 ? (
+                  <div className="p-6 text-center text-[var(--text-muted)] space-y-1">
+                    <p className="font-bold">No ingredients added to this recipe yet.</p>
+                    <p className="text-[11px]">Search & select from inventory below or click "✨ AI Suggest Ingredients".</p>
+                  </div>
+                ) : (
+                  editorIngredients.map((ing, idx) => {
+                    const inv = inventory.find(i => i.id === ing.inventoryItemId);
+                    const invUnit = inv?.unit || 'PCS';
+                    const unitCost = inv?.costPrice || 0;
+                    const convertedQty = convertUnit(ing.quantity, ing.unit, invUnit);
+                    const lineCost = convertedQty * unitCost;
+
+                    return (
+                      <div key={idx} className="p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-[var(--bg-color)]/80 transition-colors">
+                        
+                        {/* Ingredient Name & Inventory Status */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-[var(--text-main)] text-xs">{inv?.name || `ID #${ing.inventoryItemId}`}</span>
+                            {ing.isAiSuggested && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                ✨ AI Suggested
+                              </span>
+                            )}
+                            {!inv && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center gap-1">
+                                <AlertTriangle className="w-2.5 h-2.5" /> Missing in Inventory
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[10px] text-[var(--text-muted)] mt-0.5 font-mono">
+                            <span>Catalog Unit: <strong>{invUnit}</strong></span>
+                            <span>•</span>
+                            <span>Unit Cost: <strong>Rs.{unitCost} / {invUnit}</strong></span>
+                          </div>
+                        </div>
+
+                        {/* Quantity & Unit Input */}
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          <div>
+                            <span className="block text-[9px] text-[var(--text-muted)] font-extrabold uppercase mb-0.5">Quantity Used</span>
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              value={ing.quantity}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setEditorIngredients(prev => {
+                                  const updated = [...prev];
+                                  updated[idx].quantity = val;
+                                  return updated;
+                                });
+                              }}
+                              placeholder="0"
+                              className="w-24 px-2.5 py-1.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
+                            />
+                          </div>
+
+                          <div>
+                            <span className="block text-[9px] text-[var(--text-muted)] font-extrabold uppercase mb-0.5">Unit</span>
+                            <select
+                              value={ing.unit}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setEditorIngredients(prev => {
+                                  const updated = [...prev];
+                                  updated[idx].unit = val;
+                                  return updated;
+                                });
+                              }}
+                              className="px-2 py-1.5 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer"
+                            >
+                              <option value="KG">KG</option>
+                              <option value="G">Grams (G)</option>
+                              <option value="L">Liters (L)</option>
+                              <option value="ML">ML</option>
+                              <option value="PCS">PCS</option>
+                              <option value="DOZEN">DOZEN</option>
+                              <option value="PACK">PACK</option>
+                            </select>
+                          </div>
+
+                          {/* Calculated Cost */}
+                          <div className="w-24 text-right">
+                            <span className="block text-[9px] text-[var(--text-muted)] font-extrabold uppercase mb-0.5">Est. Cost</span>
+                            <span className="font-mono font-bold text-amber-400 text-xs">
+                              Rs.{lineCost.toFixed(2)}
+                            </span>
+                          </div>
+
+                          {/* Remove button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditorIngredients(prev => prev.filter((_, i) => i !== idx));
+                            }}
+                            className="p-1.5 text-[var(--text-muted)] hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer mt-3"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Add Ingredient Selector */}
+              <div className="relative">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-extrabold text-[var(--text-main)] uppercase tracking-wider text-[10px]">
+                    + Add Ingredient from Inventory Catalog
+                  </label>
+
+                  {onOpenAddIngredientModal && (
+                    <button
+                      type="button"
+                      onClick={onOpenAddIngredientModal}
+                      className="text-[10px] text-orange-400 hover:underline font-bold flex items-center gap-1"
+                    >
+                      <span>Item missing? Add to Inventory</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={ingredientSearch}
+                    onFocus={() => setShowIngredientDropdown(true)}
+                    onChange={(e) => {
+                      setIngredientSearch(e.target.value);
+                      setShowIngredientDropdown(true);
+                    }}
+                    placeholder="Search ingredient catalog (e.g. Chicken, Cheese, Bun, Oil)..."
+                    className="w-full pl-9 pr-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-bold"
+                  />
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-[var(--text-muted)]" />
+                </div>
+
+                {/* Dropdown Suggestions */}
+                {showIngredientDropdown && ingredientSearch.trim().length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl shadow-2xl max-h-52 overflow-y-auto divide-y divide-[var(--border-color)]">
+                    {(() => {
+                      const q = ingredientSearch.toLowerCase().trim();
+                      const matches = inventory.filter(i =>
+                        i.name.toLowerCase().includes(q) ||
+                        (i.category && i.category.toLowerCase().includes(q))
+                      );
+
+                      if (matches.length === 0) {
+                        return (
+                          <div className="p-3.5 text-center text-[var(--text-muted)] text-[11px]">
+                            No inventory item matching "{ingredientSearch}".
+                          </div>
+                        );
+                      }
+
+                      return matches.slice(0, 10).map((inv) => (
+                        <button
+                          key={inv.id}
+                          type="button"
+                          onClick={() => handleAddIngredientToEditor(inv)}
+                          className="w-full text-left px-3.5 py-2.5 hover:bg-orange-500/10 transition-colors flex items-center justify-between group cursor-pointer"
+                        >
+                          <div>
+                            <span className="font-bold text-[var(--text-main)] group-hover:text-orange-400">{inv.name}</span>
+                            <span className="ml-2 text-[10px] text-[var(--text-muted)]">({inv.category || 'General'})</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[10px]">
+                            <span className="font-mono text-[var(--text-muted)]">Stock: {inv.stockLevel} {inv.unit}</span>
+                            <span className="px-2 py-0.5 rounded font-black text-orange-400 bg-[var(--bg-color)] border border-orange-500/20">
+                              Rs.{inv.costPrice} / {inv.unit}
+                            </span>
+                          </div>
+                        </button>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+
+              {/* Recipe Yield & Instructions */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                    Recipe Yield
+                  </label>
+                  <input
+                    type="text"
+                    value={yieldText}
+                    onChange={(e) => setYieldText(e.target.value)}
+                    placeholder="e.g. 1 Serving, 1 Burger, 8 Pieces..."
+                    className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                    Preparation Instructions (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={prepInstructions}
+                    onChange={(e) => setPrepInstructions(e.target.value)}
+                    placeholder="Optional preparation steps..."
+                    className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)]"
+                  />
+                </div>
+              </div>
+
+              {/* Recipe Cost Summary Box */}
+              <div className="bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-orange-500/10 border border-orange-500/30 p-4 rounded-2xl flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-extrabold text-[var(--text-muted)] uppercase tracking-wider block">Recipe Financial Summary</span>
+                  <div className="flex items-center gap-4 mt-1 font-mono">
+                    <div>
+                      <span className="text-[10px] text-[var(--text-muted)]">Selling Price:</span>
+                      <strong className="text-xs text-[var(--text-main)] block">Rs. {activeEditorItem.price}</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-[var(--text-muted)]">Calculated Recipe Cost:</span>
+                      <strong className="text-xs text-amber-400 block">Rs. {editorCalculatedCost.toFixed(2)}</strong>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-[var(--text-muted)] font-bold">Food Cost %:</span>
+                      <strong className={`text-xs block font-black ${parseFloat(editorFoodCostPercent) > 40 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                        {editorFoodCostPercent}%
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] font-bold text-[var(--text-muted)] block">Inventory Mapped</span>
+                  <span className="text-sm font-black text-emerald-400 font-mono">
+                    {editorIngredients.length} / {editorIngredients.length} Items
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--border-color)] shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveEditorItem(null)}
+                  className="px-4 py-2.5 rounded-xl bg-[var(--bg-color)] hover:bg-[var(--card-bg)] text-xs font-bold text-[var(--text-muted)] border border-[var(--border-color)] cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-xs shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                >
+                  Save & Activate Recipe
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 6. DUPLICATE RECIPE MODAL — Portal to document.body for true screen centering */}
+      {duplicateSourceItem && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-scale-up">
+            <h3 className="text-base font-black text-[var(--text-main)] font-display flex items-center gap-2">
+              <Copy className="w-5 h-5 text-orange-400" />
+              Duplicate Recipe
+            </h3>
+
+            <p className="text-xs text-[var(--text-muted)]">
+              Copy recipe ingredients from <strong className="text-[var(--text-main)]">{duplicateSourceItem.name}</strong> to another POS menu item.
+            </p>
+
+            <div>
+              <label className="block font-bold text-[var(--text-main)] uppercase mb-1 tracking-wider text-[10px]">
+                Target Menu Item
+              </label>
+              <select
+                value={duplicateTargetId}
+                onChange={(e) => setDuplicateTargetId(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer"
+              >
+                <option value="">Select target menu item...</option>
+                {menuItems
+                  .filter(m => m.id !== duplicateSourceItem.id)
+                  .map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} (Rs. {m.price})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDuplicateSourceItem(null)}
+                className="px-4 py-2 rounded-xl bg-[var(--bg-color)] text-xs font-bold text-[var(--text-muted)] cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmDuplicate}
+                disabled={!duplicateTargetId}
+                className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg cursor-pointer"
+              >
+                Confirm Duplicate
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+    </div>
+  );
+};
+
+export default AdminRecipeBuilderView;

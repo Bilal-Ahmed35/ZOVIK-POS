@@ -79,7 +79,13 @@ const deductInventoryForConfirmedOrder = async (orderId, userId = null, tx = nul
         }
 
         const rawNeededQty = recipe.quantity * itemQty;
-        const convertedQty = convertUnit(rawNeededQty, recipe.unit, invItem.unit);
+        let convertedQty;
+        try {
+          convertedQty = convertUnit(rawNeededQty, recipe.unit, invItem.unit);
+        } catch (convErr) {
+          console.warn(`[InventoryDeduction] Unit conversion failed from '${recipe.unit}' to '${invItem.unit}' for '${invItem.name}': ${convErr.message}. Falling back to raw qty ${rawNeededQty}.`);
+          convertedQty = rawNeededQty;
+        }
 
         const qtyBefore = invItem.stockLevel;
         const qtyAfter = Math.max(0, qtyBefore - convertedQty);
@@ -108,7 +114,39 @@ const deductInventoryForConfirmedOrder = async (orderId, userId = null, tx = nul
         itemsToEmit.push(updatedInv);
       }
     } else {
-      console.log(`[InventoryDeduction] No recipe items configured for "${orderItem.nameSnapshot}". Skipping raw ingredient deduction.`);
+      // Fallback: search for inventory item with matching name
+      const targetName = orderItem.nameSnapshot || menuItem?.name;
+      const matchingInvItem = targetName ? await db.inventoryItem.findFirst({
+        where: {
+          name: { equals: targetName, mode: 'insensitive' },
+          ...(order.branchId ? { branchId: order.branchId } : {})
+        }
+      }) : null;
+
+      if (matchingInvItem) {
+        const qtyBefore = matchingInvItem.stockLevel;
+        const qtyAfter = Math.max(0, qtyBefore - itemQty);
+        const updatedInv = await db.inventoryItem.update({
+          where: { id: matchingInvItem.id },
+          data: { stockLevel: qtyAfter }
+        });
+        await db.inventoryLog.create({
+          data: {
+            inventoryItemId: matchingInvItem.id,
+            quantityBefore: qtyBefore,
+            quantityAfter: qtyAfter,
+            changeQty: -itemQty,
+            type: 'USAGE',
+            reason: `Order #${order.orderNumber} confirmed (${orderItem.nameSnapshot} x${itemQty})`,
+            orderId: order.id,
+            orderItemId: orderItem.id,
+            userId: userId || order.userId || null
+          }
+        });
+        itemsToEmit.push(updatedInv);
+      } else {
+        console.warn(`[InventoryDeduction] No recipe or name match for "${orderItem.nameSnapshot || menuItem?.name}" in Order #${order.orderNumber}. Skipping stock deduction for this item.`);
+      }
     }
   }
 

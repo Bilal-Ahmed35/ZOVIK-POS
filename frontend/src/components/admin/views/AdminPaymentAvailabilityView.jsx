@@ -8,6 +8,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import api from '../../../services/api';
+import { getSocket } from '../../../services/socket';
 
 const AdminPaymentAvailabilityView = ({ showToast }) => {
   const [settings, setSettings] = useState({ codEnabled: true, onlineEnabled: true, updatedAt: null });
@@ -18,7 +19,10 @@ const AdminPaymentAvailabilityView = ({ showToast }) => {
     setLoading(true);
     try {
       const res = await api.get('/payments/settings');
-      setSettings(res.data.settings || { codEnabled: true, onlineEnabled: true });
+      const data = res.data.settings || res.data;
+      if (data && typeof data.codEnabled === 'boolean') {
+        setSettings(data);
+      }
     } catch (err) {
       console.error(err);
       if (showToast) showToast('Failed to load payment availability settings', 'error');
@@ -29,6 +33,17 @@ const AdminPaymentAvailabilityView = ({ showToast }) => {
 
   useEffect(() => {
     fetchSettings();
+    const socket = getSocket();
+    if (socket) {
+      const handleUpdate = (payload) => {
+        const data = payload.settings || payload;
+        if (data && typeof data.codEnabled === 'boolean') {
+          setSettings(data);
+        }
+      };
+      socket.on('paymentSettings:update', handleUpdate);
+      return () => socket.off('paymentSettings:update', handleUpdate);
+    }
   }, []);
 
   const handleToggle = async (key, value) => {
@@ -39,7 +54,10 @@ const AdminPaymentAvailabilityView = ({ showToast }) => {
         codEnabled: updated.codEnabled,
         onlineEnabled: updated.onlineEnabled,
       });
-      setSettings(res.data.settings);
+      const data = res.data.settings || res.data;
+      if (data && typeof data.codEnabled === 'boolean') {
+        setSettings(data);
+      }
       if (showToast) showToast('Payment availability updated!');
     } catch (err) {
       console.error(err);

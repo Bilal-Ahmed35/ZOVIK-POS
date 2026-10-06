@@ -1,14 +1,72 @@
 /**
  * AI / OCR Invoice & Excel/CSV Parsing and Catalog Matching Service for ZovikPOS
- * Supports .xlsx, .xls, .csv files, PDF/image OCR text, and matches rows against InventoryItem catalog.
+ * Supports .xlsx, .xls, .csv files, PDF/image OCR text, Groq AI Vision scan, and matches rows against InventoryItem catalog.
  */
 const XLSX = require('xlsx');
 const { prisma } = require('../config/db');
+const { analyzeInvoiceImageWithGroq } = require('./groqService');
 
 /**
  * Normalizes header string for fuzzy matching
  */
 const normalizeHeader = (h) => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Smart Fuzzy Catalog Matcher
+ * Matches receipt items like "Oil" -> "Cooking Oil", "Chicken" -> "Chicken Breast", "Flour" -> "All-Purpose Flour"
+ */
+const findBestFuzzyCatalogMatch = (rawName, sku, catalogItems) => {
+  if (sku) {
+    const skuMatch = catalogItems.find(c => c.sku && c.sku.toLowerCase() === sku.toLowerCase());
+    if (skuMatch) return { item: skuMatch, confidence: 1.0 };
+  }
+
+  if (!rawName) return null;
+  const cleanRaw = rawName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  const rawTokens = cleanRaw.split(/\s+/).filter(w => w.length > 1);
+
+  // 1. Exact match (case insensitive)
+  const exactMatch = catalogItems.find(c => c.name.toLowerCase().trim() === cleanRaw);
+  if (exactMatch) return { item: exactMatch, confidence: 1.0 };
+
+  // 2. Substring match (e.g. "cooking oil" includes "oil", "chicken breast" includes "chicken")
+  const subCandidates = catalogItems.filter(
+    c => c.name.toLowerCase().includes(cleanRaw) || cleanRaw.includes(c.name.toLowerCase())
+  );
+  if (subCandidates.length === 1) {
+    return { item: subCandidates[0], confidence: 0.90 };
+  }
+
+  // 3. Smart Token overlap match for variations across stores (e.g. "Oil" -> "Cooking Oil")
+  let bestItem = null;
+  let bestScore = 0;
+
+  for (const cat of catalogItems) {
+    const cleanCat = cat.name.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+    const catTokens = cleanCat.split(/\s+/).filter(w => w.length > 1);
+
+    let matches = 0;
+    for (const rToken of rawTokens) {
+      if (catTokens.some(cToken => cToken.includes(rToken) || rToken.includes(cToken))) {
+        matches++;
+      }
+    }
+
+    if (matches > 0) {
+      const score = matches / Math.max(rawTokens.length, catTokens.length);
+      if (score > bestScore) {
+        bestScore = score;
+        bestItem = cat;
+      }
+    }
+  }
+
+  if (bestItem && bestScore >= 0.25) {
+    return { item: bestItem, confidence: 0.85 };
+  }
+
+  return null;
+};
 
 /**
  * Parses buffer/base64/text from CSV, Excel, or Invoice payload and matches against catalog
@@ -19,17 +77,47 @@ const parseAndMatchInvoice = async ({ rawText, fileBuffer, fileBase64, fileName,
   let extractedDate = null;
   let detectedSupplierName = supplierNameHint || null;
 
-  // 1. Process Excel / CSV file buffer or base64 if provided
-  if (fileBuffer || fileBase64) {
+  // 1. Check if file is image / base64 image -> use Groq AI Vision
+  const isImageBase64 = fileBase64 && (
+    fileBase64.startsWith('data:image') ||
+    (fileName && /\.(jpg|jpeg|png|webp|bmp|gif)$/i.test(fileName))
+  );
+
+  if (isImageBase64) {
+    console.log('[AI OCR] Attempting Groq AI Vision scan for receipt image...');
+    const groqResult = await analyzeInvoiceImageWithGroq(fileBase64);
+
+    if (groqResult && Array.isArray(groqResult.items) && groqResult.items.length > 0) {
+      if (groqResult.supplierName) detectedSupplierName = groqResult.supplierName;
+      if (groqResult.invoiceNumber) extractedInvoiceNumber = groqResult.invoiceNumber;
+      if (groqResult.date) extractedDate = groqResult.date;
+
+      for (const item of groqResult.items) {
+        if (item.rawName && item.quantity > 0) {
+          rawRows.push({
+            rawName: item.rawName,
+            sku: null,
+            quantity: parseFloat(item.quantity),
+            unit: (item.unit || 'KG').toUpperCase(),
+            unitCost: parseFloat(item.unitCost || 0),
+            batchNumber: item.batchNumber || null,
+            expiryDate: item.expiryDate || null,
+          });
+        }
+      }
+    }
+  }
+
+  // 2. Process Excel / CSV file buffer or base64 if provided and not image
+  if (rawRows.length === 0 && (fileBuffer || fileBase64)) {
     try {
-      const buffer = fileBuffer || Buffer.from(fileBase64, 'base64');
+      const buffer = fileBuffer || Buffer.from(fileBase64.replace(/^data:.*?;base64,/, ''), 'base64');
       const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       const sheetJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
       if (sheetJson && sheetJson.length > 0) {
-        // Locate Header Row
         let headerRowIndex = 0;
         for (let i = 0; i < Math.min(5, sheetJson.length); i++) {
           const row = sheetJson[i].map(c => String(c).toLowerCase());
@@ -41,7 +129,6 @@ const parseAndMatchInvoice = async ({ rawText, fileBuffer, fileBase64, fileName,
 
         const headers = sheetJson[headerRowIndex].map(h => normalizeHeader(h));
         
-        // Find Column Indices
         const nameIdx = headers.findIndex(h => h.includes('item') || h.includes('name') || h.includes('product') || h.includes('ingredient'));
         const skuIdx = headers.findIndex(h => h.includes('sku') || h.includes('code'));
         const qtyIdx = headers.findIndex(h => h.includes('qty') || h.includes('quantity') || h.includes('amount') || h.includes('volume'));
@@ -80,7 +167,7 @@ const parseAndMatchInvoice = async ({ rawText, fileBuffer, fileBase64, fileName,
     }
   }
 
-  // 2. Fallback to rawText / CSV string parser if file buffer didn't yield rows
+  // 3. Fallback to rawText / CSV string parser if file buffer didn't yield rows
   if (rawRows.length === 0 && rawText && typeof rawText === 'string') {
     const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
@@ -134,37 +221,20 @@ const parseAndMatchInvoice = async ({ rawText, fileBuffer, fileBase64, fileName,
   const seenIds = new Set();
 
   for (const item of rawRows) {
-    const searchName = item.rawName.toLowerCase().trim();
-    
-    // Priority 1: Match by SKU
-    let match = item.sku
-      ? catalogItems.find(c => c.sku && c.sku.toLowerCase() === item.sku.toLowerCase())
-      : null;
+    const fuzzyResult = findBestFuzzyCatalogMatch(item.rawName, item.sku, catalogItems);
 
-    // Priority 2: Match by exact Name (case insensitive)
-    if (!match) {
-      match = catalogItems.find(c => c.name.toLowerCase() === searchName);
-    }
+    if (fuzzyResult && fuzzyResult.item) {
+      const match = fuzzyResult.item;
 
-    // Priority 3: Unique candidate match if name is unique prefix/substring
-    if (!match) {
-      const candidates = catalogItems.filter(
-        c => c.name.toLowerCase().includes(searchName) || searchName.includes(c.name.toLowerCase())
-      );
-      if (candidates.length === 1) {
-        match = candidates[0];
-      }
-    }
-
-    if (match) {
       if (seenIds.has(match.id)) {
-        warnings.push(`Duplicate entry for "${match.name}" detected in shipment file.`);
+        warnings.push(`Duplicate entry for "${match.name}" detected in receipt.`);
       }
       seenIds.add(match.id);
 
       matched.push({
         inventoryItemId: match.id,
         name: match.name,
+        rawScannedName: item.rawName,
         category: match.category,
         sku: match.sku,
         currentStock: match.stockLevel,
@@ -175,7 +245,7 @@ const parseAndMatchInvoice = async ({ rawText, fileBuffer, fileBase64, fileName,
         totalCost: item.quantity * (item.unitCost || match.costPrice),
         batchNumber: item.batchNumber || null,
         expiryDate: item.expiryDate || null,
-        confidence: match.name.toLowerCase() === searchName ? 1.0 : 0.85,
+        confidence: fuzzyResult.confidence,
         status: 'MATCHED'
       });
     } else {
@@ -197,9 +267,9 @@ const parseAndMatchInvoice = async ({ rawText, fileBuffer, fileBase64, fileName,
   return {
     success: true,
     fileName: fileName || null,
-    invoiceNumber: extractedInvoiceNumber || `INV-${Math.floor(1000 + Math.random() * 9000)}`,
+    invoiceNumber: extractedInvoiceNumber || `INV-${Math.floor(10000 + Math.random() * 90000)}`,
     receivingDate: extractedDate || new Date().toISOString().split('T')[0],
-    supplierName: detectedSupplierName,
+    supplierName: detectedSupplierName || 'General Supplier / Market Purchase',
     matchedItems: matched,
     unmatchedItems: unmatched,
     warnings,
@@ -214,4 +284,5 @@ const parseAndMatchInvoice = async ({ rawText, fileBuffer, fileBase64, fileName,
 
 module.exports = {
   parseAndMatchInvoice,
+  findBestFuzzyCatalogMatch,
 };

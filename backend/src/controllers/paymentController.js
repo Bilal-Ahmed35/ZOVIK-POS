@@ -1,5 +1,5 @@
 const { prisma } = require('../config/db');
-const { emitToVendor, emitToUser, emitToKitchen, emitToAdmin } = require('../sockets/socket');
+const { emitToVendor, emitToUser, emitToKitchen, emitToAdmin, broadcastEvent } = require('../sockets/socket');
 const { sendPaymentConfirmedEmail, sendOrderCancellationEmail } = require('../services/emailService');
 const { logAudit } = require('../middleware/auditMiddleware');
 const { deductInventoryForConfirmedOrder, restoreInventoryForOrder } = require('../services/inventoryDeductionService');
@@ -16,10 +16,15 @@ const getPaymentSettings = async (req, res) => {
       });
     }
 
-    return res.json({
+    const payload = {
       codEnabled: settings.codEnabled,
       onlineEnabled: settings.onlineEnabled,
       updatedAt: settings.updatedAt,
+    };
+
+    return res.json({
+      ...payload,
+      settings: payload,
     });
   } catch (error) {
     console.error('Get payment settings error:', error);
@@ -63,10 +68,7 @@ const updatePaymentSettings = async (req, res) => {
     };
 
     // Realtime Socket broadcast to all connected clients (customers, vendors, admin)
-    const { io } = require('../sockets/socket');
-    if (io) {
-      io.emit('paymentSettings:update', payload);
-    }
+    broadcastEvent('paymentSettings:update', payload);
 
     await logAudit({
       userId: staffUserId,
@@ -80,6 +82,7 @@ const updatePaymentSettings = async (req, res) => {
 
     return res.json({
       message: 'Payment availability settings updated successfully.',
+      ...payload,
       settings: payload,
     });
   } catch (error) {
@@ -217,18 +220,8 @@ const verifyTransaction = async (req, res) => {
     const newStatus = approve ? 'PAID' : 'PAYMENT_FAILED';
     const newPaymentStatus = approve ? 'VERIFIED' : 'FAILED';
 
+    // STEP 1: Update order status + history in a FAST minimal transaction (no inventory here)
     const updatedOrder = await prisma.$transaction(async (tx) => {
-      // If approving payment, trigger inventory deduction
-      if (approve && previousStatus !== 'PAID') {
-        await deductInventoryForConfirmedOrder(order.id, staffUserId, tx);
-      }
-
-      // If rejecting payment, trigger stock restoration idempotently
-      if (!approve && previousStatus !== 'PAYMENT_FAILED') {
-        await restoreInventoryForOrder(order.id, staffUserId, reason || 'Payment verification rejected by staff.', tx);
-      }
-
-      // Record OrderStatusHistory
       await tx.orderStatusHistory.create({
         data: {
           orderId: order.id,
@@ -253,33 +246,47 @@ const verifyTransaction = async (req, res) => {
           etaPrediction: true,
         },
       });
-    }, { maxWait: 15000, timeout: 30000 });
+    });
 
-    // Notify all realtime layers
+    // STEP 2: Immediately emit to all realtime layers (kitchen gets order right away)
     emitToUser(updatedOrder.userId, 'order:update', updatedOrder);
     emitToVendor('order:update', updatedOrder);
     emitToAdmin('order:update', updatedOrder);
 
     if (approve) {
-      // Send directly to kitchen queue
       emitToKitchen('order:new', updatedOrder);
-      sendPaymentConfirmedEmail(updatedOrder).catch((err) =>
-        console.error('[Email] Payment confirmed email error:', err.message)
-      );
-    } else {
-      sendOrderCancellationEmail(updatedOrder, 'PAYMENT_FAILED').catch((err) =>
-        console.error('[Email] Payment failed email error:', err.message)
-      );
     }
 
-    await logAudit({
-      userId: staffUserId,
-      action: approve ? 'PAYMENT_VERIFIED' : 'PAYMENT_REJECTED',
-      entity: 'Order',
-      entityId: order.id,
-      oldValue: { status: previousStatus, paymentStatus: order.paymentStatus },
-      newValue: { status: newStatus, paymentStatus: newPaymentStatus },
-      req,
+    // STEP 3: Run heavy inventory deduction + email + audit asynchronously (non-blocking)
+    setImmediate(async () => {
+      try {
+        if (approve && previousStatus !== 'PAID') {
+          await deductInventoryForConfirmedOrder(order.id, staffUserId, null);
+        } else if (!approve && previousStatus !== 'PAYMENT_FAILED') {
+          await restoreInventoryForOrder(order.id, staffUserId, reason || 'Payment verification rejected by staff.', null);
+        }
+      } catch (invErr) {
+        console.error('[InventoryDeduction] Background deduction error:', invErr.message);
+      }
+
+      if (approve) {
+        sendPaymentConfirmedEmail(updatedOrder).catch((err) =>
+          console.error('[Email] Payment confirmed email error:', err.message)
+        );
+      } else {
+        sendOrderCancellationEmail(updatedOrder, 'PAYMENT_FAILED').catch((err) =>
+          console.error('[Email] Payment failed email error:', err.message)
+        );
+      }
+
+      logAudit({
+        userId: staffUserId,
+        action: approve ? 'PAYMENT_VERIFIED' : 'PAYMENT_REJECTED',
+        entity: 'Order',
+        entityId: order.id,
+        oldValue: { status: previousStatus, paymentStatus: order.paymentStatus },
+        newValue: { status: newStatus, paymentStatus: newPaymentStatus },
+      }).catch(err => console.error('[Audit Log Error]', err));
     });
 
     return res.json({

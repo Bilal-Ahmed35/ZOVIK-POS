@@ -87,7 +87,7 @@ const AdminCustomersView = ({ showToast }) => {
               <td><strong>${c.name}</strong></td>
               <td>${c.email}</td>
               <td>${c.totalOrders}</td>
-              <td>Rs. ${c.totalSpent.toFixed(2)}</td>
+              <td>Rs. ${Number(c.totalSpent || 0).toFixed(2)}</td>
               <td>${c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleString() : 'N/A'}</td>
               <td><span class="badge badge-success">${c.isActive ? 'Active' : 'Inactive'}</span></td>
             </tr>
@@ -169,7 +169,7 @@ const AdminCustomersView = ({ showToast }) => {
                     <td className="p-4 font-bold text-[var(--text-main)]">{c.name}</td>
                     <td className="p-4 font-mono text-[var(--text-muted)]">{c.email}</td>
                     <td className="p-4 font-bold text-[var(--text-main)]">{c.totalOrders} orders</td>
-                    <td className="p-4 font-mono font-extrabold text-emerald-400">Rs. {c.totalSpent.toFixed(2)}</td>
+                    <td className="p-4 font-mono font-extrabold text-emerald-400">Rs. {Number(c.totalSpent || 0).toFixed(2)}</td>
                     <td className="p-4 text-[11px] text-[var(--text-muted)]">
                       {c.lastOrderDate ? new Date(c.lastOrderDate).toLocaleString() : 'No orders'}
                     </td>
@@ -224,7 +224,7 @@ const AdminCustomersView = ({ showToast }) => {
               </div>
               <div className="p-4 bg-[var(--bg-color)] rounded-2xl border border-[var(--border-color)]">
                 <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase block">Total Spending</span>
-                <strong className="text-lg font-mono font-extrabold text-emerald-400 block">Rs. {selectedCustomer.totalSpent.toFixed(2)}</strong>
+                <strong className="text-lg font-mono font-extrabold text-emerald-400 block">Rs. {Number(selectedCustomer.totalSpent || 0).toFixed(2)}</strong>
               </div>
             </div>
 

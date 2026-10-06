@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../services/api';
-import { Lock, Mail, Flame, CreditCard, ShieldCheck, User, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Lock, Mail, Flame, CreditCard, ShieldCheck, User, AlertCircle, ArrowRight, ArrowLeft, Eye, EyeOff, Zap } from 'lucide-react';
 
 const ROLE_CONFIGS = {
   KITCHEN: {
@@ -10,9 +10,10 @@ const ROLE_CONFIGS = {
     expectedRole: 'KITCHEN',
     icon: Flame,
     badgeText: 'Kitchen Display System',
-    defaultEmail: 'kitchen@zovikpos.com',
     targetRoute: '/kitchen',
-    mismatchError: 'This portal is strictly for Kitchen staff. Your account is registered under a different role.',
+    mismatchError: '❌ Invalid portal access! This portal is strictly for Kitchen Staff. Cashier or Admin credentials will not work here. Please log in with a Kitchen Staff account.',
+    demoEmail: 'demo.kitchen@testpos.local',
+    demoPassword: 'password123',
   },
   CASHIER: {
     title: 'Cashier Login',
@@ -20,9 +21,10 @@ const ROLE_CONFIGS = {
     expectedRole: 'VENDOR',
     icon: CreditCard,
     badgeText: 'POS Terminal Portal',
-    defaultEmail: 'cashier@zovikpos.com',
     targetRoute: '/cashier',
-    mismatchError: 'This portal is strictly for Cashier staff. Your account is registered under a different role.',
+    mismatchError: '❌ Invalid portal access! This portal is strictly for Cashiers and Vendors. Admin or Kitchen credentials will not work here. Please log in with a Cashier account.',
+    demoEmail: 'demo.cashier@testpos.local',
+    demoPassword: 'password123',
   },
   ADMIN: {
     title: 'Admin Login',
@@ -30,9 +32,10 @@ const ROLE_CONFIGS = {
     expectedRole: 'ADMIN',
     icon: ShieldCheck,
     badgeText: 'System Admin Control',
-    defaultEmail: 'admin@zovikpos.com',
     targetRoute: '/admin',
-    mismatchError: 'This portal is strictly for Administrator accounts.',
+    mismatchError: '❌ Invalid portal access! This portal is strictly for System Administrators. Cashier or Kitchen credentials will not work here. Please log in with an Admin account.',
+    demoEmail: 'demo.admin@testpos.local',
+    demoPassword: 'password123',
   },
   CUSTOMER: {
     title: 'Customer Login',
@@ -51,18 +54,22 @@ const RoleLogin = ({ roleType = 'CASHIER', onLoginSuccess }) => {
   const config = ROLE_CONFIGS[roleType] || ROLE_CONFIGS.CASHIER;
   const RoleIcon = config.icon;
 
-  const [email, setEmail] = useState(config.defaultEmail || '');
-  const [password, setPassword] = useState('Redline742454');
+  // Empty inputs by default for clean user experience
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   React.useEffect(() => {
-    setEmail(config.defaultEmail || '');
-    setPassword('Redline742454');
+    setEmail('');
+    setPassword('');
+    setShowPassword(false);
+    setError('');
   }, [roleType]);
 
   const handleLogin = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setError('');
 
     if (!email || !password) {
@@ -72,11 +79,14 @@ const RoleLogin = ({ roleType = 'CASHIER', onLoginSuccess }) => {
 
     setLoading(true);
     try {
-      const response = await api.post('/auth/login', { email, password });
+      // Single clean login attempt — demo accounts use password123, real accounts use their actual password
+      const response = await api.post('/auth/login', { email: email.trim().toLowerCase(), password });
+
       const { user, accessToken, refreshToken } = response.data;
 
-      // Role check verification (ADMIN can log into admin, specific role checks)
-      if (config.expectedRole !== 'CUSTOMER' && user.role !== config.expectedRole && user.role !== 'ADMIN') {
+      // Strict role check: user must have exactly the expected role for this portal
+      // ADMIN can only access admin portal, VENDOR can only access cashier portal, KITCHEN only kitchen portal
+      if (config.expectedRole !== 'CUSTOMER' && user.role !== config.expectedRole) {
         setError(config.mismatchError);
         setLoading(false);
         return;
@@ -89,15 +99,10 @@ const RoleLogin = ({ roleType = 'CASHIER', onLoginSuccess }) => {
       }
     } catch (err) {
       console.error('Role Login error:', err);
-      setError(err.response?.data?.error || 'Invalid credentials or connection error.');
+      setError(err.response?.data?.error || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickFill = () => {
-    setEmail(config.defaultEmail);
-    setPassword('Redline742454');
   };
 
   return (
@@ -107,7 +112,7 @@ const RoleLogin = ({ roleType = 'CASHIER', onLoginSuccess }) => {
       <div className="absolute bottom-10 right-10 w-[300px] sm:w-[400px] h-[300px] sm:h-[400px] bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
 
       <div className="w-full max-w-md bg-[var(--card-bg)]/90 backdrop-blur-2xl border border-[var(--border-color)] p-6 sm:p-8 rounded-3xl shadow-2xl space-y-6 relative z-10 animate-fade-in">
-        
+
         {/* Top Branding & Navigation */}
         <div className="flex items-center justify-between pb-2 border-b border-[var(--border-color)]">
           <Link to="/customer" className="inline-flex items-center space-x-1.5 text-xs text-[var(--text-muted)] hover:text-orange-500 transition-colors font-semibold">
@@ -165,14 +170,22 @@ const RoleLogin = ({ roleType = 'CASHIER', onLoginSuccess }) => {
             </label>
             <div className="relative">
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl px-4 py-3 pl-10 text-xs sm:text-sm text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-all"
+                className="w-full bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl px-4 py-3 pl-10 pr-10 text-xs sm:text-sm text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-orange-500 transition-all"
                 required
               />
               <Lock className="w-4 h-4 text-[var(--text-muted)] absolute left-3.5 top-3.5 sm:top-4" />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-3.5 sm:top-4 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors cursor-pointer"
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
@@ -184,22 +197,30 @@ const RoleLogin = ({ roleType = 'CASHIER', onLoginSuccess }) => {
             <span>{loading ? 'Authenticating...' : `Sign In to ${config.title.replace(' Login', '')}`}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
-        </form>
 
-        {/* Testing Quick Fill Shortcut */}
-        <div className="border-t border-[var(--border-color)] pt-4">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-[10px] text-[var(--text-muted)] font-bold uppercase tracking-wider">
-              Testing Account
-            </span>
+          {config.demoEmail && (
             <button
               type="button"
-              onClick={handleQuickFill}
-              className="text-[11px] text-orange-500 hover:text-orange-400 font-extrabold transition-colors cursor-pointer flex items-center space-x-1"
+              onClick={() => {
+                setEmail(config.demoEmail);
+                setPassword(config.demoPassword);
+              }}
+              className="w-full py-2.5 px-3 bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 text-orange-600 dark:text-orange-400 text-xs font-bold rounded-xl transition-all flex items-center justify-center space-x-2 cursor-pointer"
             >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Fill {config.defaultEmail}</span>
+              <Zap className="w-3.5 h-3.5" />
+              <span>Fill Demo Credentials ({config.demoEmail})</span>
             </button>
+          )}
+        </form>
+
+        {/* Mode Guidance & Testing Quick Fill Shortcut */}
+        <div className="border-t border-[var(--border-color)] pt-4 space-y-3">
+          <div className="p-2.5 rounded-xl bg-[var(--bg-color)] border border-[var(--border-color)] text-[10px] text-[var(--text-muted)] space-y-1">
+            <span className="font-bold text-emerald-600 dark:text-emerald-400 block">🟢 Real Account (Full Access)</span>
+            <span>Real accounts have full write access.</span>
+
+            <span className="font-bold text-orange-600 dark:text-orange-400 block mt-2">🔒 Demo Account (Read-Only)</span>
+            <span>Demo accounts are strictly restricted to read-only access. Actions & updates are disabled.</span>
           </div>
         </div>
       </div>

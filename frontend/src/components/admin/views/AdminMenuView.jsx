@@ -36,6 +36,25 @@ const PRESET_UNITS = [
   'Glass',
 ];
 
+const MASTER_CATEGORIES = [
+  'Lunch',
+  'Breakfast',
+  'Fast Food',
+  'Refreshment',
+  'Fried Chicken',
+  'Wraps',
+  'Pizza',
+  'Beverages',
+  'Burgers',
+  'Sandwiches',
+  'Pasta',
+  'Salads',
+  'Beverages & Shakes',
+  'Fries',
+  'Desserts & Cakes',
+  'Rice & Biryani',
+];
+
 const resolveImageUrl = (url) => {
   if (!url || typeof url !== 'string' || url.trim() === '') return null;
   const trimmed = url.trim();
@@ -93,15 +112,26 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
     });
   }, [inventory, selectedCategory, searchTerm, statusFilter]);
 
-  const categories = useMemo(() => {
-    const defaultCats = ['ALL', 'Lunch', 'Breakfast', 'Fast Food', 'Refreshment'];
-    const customCats = new Set();
+  // All available category options for selection in Add/Edit form: master list + custom categories in inventory
+  const categoryOptions = useMemo(() => {
+    const opts = [...MASTER_CATEGORIES];
     inventory.forEach((item) => {
-      if (item.category && !defaultCats.includes(item.category)) {
-        customCats.add(item.category);
+      if (item.category && !opts.includes(item.category)) {
+        opts.push(item.category);
       }
     });
-    return [...defaultCats, ...Array.from(customCats)];
+    return opts;
+  }, [inventory]);
+
+  // Categories strip filter bar: ONLY categories that actually have items in inventory (plus ALL)
+  const categories = useMemo(() => {
+    const presentCats = new Set();
+    inventory.forEach((item) => {
+      if (item.category) {
+        presentCats.add(item.category);
+      }
+    });
+    return ['ALL', ...Array.from(presentCats)];
   }, [inventory]);
 
   const existingGroups = useMemo(() => {
@@ -190,10 +220,12 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
   const handleOpenEditGroup = (groupKey, variantsList) => {
     const primary = variantsList[0];
     const isCustomGrp = !existingGroups.includes(groupKey);
+    const itemCategory = primary.category || 'Lunch';
+    const isKnownCat = categoryOptions.includes(itemCategory);
 
     setFormData({
       name: primary.name || groupKey,
-      category: primary.category || 'Lunch',
+      category: isKnownCat ? itemCategory : 'CUSTOM',
       groupName: isCustomGrp ? 'CUSTOM' : groupKey,
       customGroup: isCustomGrp ? groupKey : '',
       prepTime: String(primary.prepTime ?? '10'),
@@ -210,7 +242,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
     });
 
     setImageMode(primary.imageUrl && !primary.imageUrl.startsWith('data:') ? 'url' : 'file');
-    setCustomCategory('');
+    setCustomCategory(isKnownCat ? '' : itemCategory);
     setImagePreview(primary.imageUrl || null);
     setPendingBase64(null);
     setImageError('');
@@ -220,10 +252,12 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
   const handleOpenEditSingleVariant = (variantItem) => {
     const groupKey = variantItem.groupName || variantItem.name;
     const isCustomGrp = !existingGroups.includes(groupKey);
+    const itemCategory = variantItem.category || 'Lunch';
+    const isKnownCat = categoryOptions.includes(itemCategory);
 
     setFormData({
       name: variantItem.name || groupKey,
-      category: variantItem.category || 'Lunch',
+      category: isKnownCat ? itemCategory : 'CUSTOM',
       groupName: isCustomGrp ? 'CUSTOM' : groupKey,
       customGroup: isCustomGrp ? groupKey : '',
       prepTime: String(variantItem.prepTime ?? '10'),
@@ -242,7 +276,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
     });
 
     setImageMode(variantItem.imageUrl && !variantItem.imageUrl.startsWith('data:') ? 'url' : 'file');
-    setCustomCategory('');
+    setCustomCategory(isKnownCat ? '' : itemCategory);
     setImagePreview(variantItem.imageUrl || null);
     setPendingBase64(null);
     setImageError('');
@@ -509,7 +543,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
           return (
             <div
               key={groupKey}
-              className={`bg-[var(--card-bg)]/40 border rounded-2xl overflow-hidden shadow-lg flex flex-col transition-all ${
+              className={`bg-[var(--card-bg)]/40 border rounded-2xl overflow-hidden shadow-lg flex flex-col justify-between h-full transition-all ${
                 allActive ? 'border-[var(--border-color)]' : someActive ? 'border-amber-500/30' : 'border-rose-500/30 opacity-70'
               }`}
             >
@@ -612,46 +646,48 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                     return (
                       <div
                         key={v.id}
-                        className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${
+                        className={`flex items-center justify-between gap-2 p-2 sm:p-2.5 rounded-xl border transition-all ${
                           isVActive
                             ? 'bg-[var(--bg-color)] border-[var(--border-color)]'
                             : 'bg-rose-500/5 border-rose-500/20 opacity-70'
                         }`}
                       >
                         {/* Left: Unit + Price */}
-                        <div className="flex items-center space-x-2.5 flex-1 min-w-0">
-                          <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-md text-[10px] font-bold shrink-0">
+                        <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+                          <span className="px-2 py-0.5 bg-orange-500/20 text-orange-500 dark:text-orange-400 border border-orange-500/30 rounded-md text-[10px] font-bold shrink-0">
                             {v.unit || '1 No.'}
                           </span>
-                          <span className="text-sm font-mono font-extrabold text-[var(--text-main)] shrink-0">
+                          <span className="text-xs sm:text-sm font-mono font-black text-[var(--text-main)] whitespace-nowrap">
                             Rs. {v.price?.toFixed(0)}
                           </span>
                         </div>
+
                         {/* Right: Actions */}
-                        <div className="flex items-center space-x-1.5 shrink-0 ml-2">
+                        <div className="flex items-center space-x-1 shrink-0 ml-auto">
                           <button
                             type="button"
                             onClick={() => handleToggleAvailability(v)}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center space-x-1 transition-all cursor-pointer border ${
+                            className={`px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-extrabold flex items-center space-x-1 transition-all cursor-pointer border whitespace-nowrap ${
                               isVActive
                                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
                                 : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
                             }`}
                             title={isVActive ? 'Mark portion unavailable' : 'Mark portion available'}
                           >
-                            <span className={`w-1.5 h-1.5 rounded-full ${isVActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                            <span>{isVActive ? 'Available' : 'Unavailable'}</span>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isVActive ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                            <span className="hidden xs:inline sm:inline">{isVActive ? 'Available' : 'Unavailable'}</span>
+                            <span className="xs:hidden sm:hidden">{isVActive ? 'Avail' : 'Off'}</span>
                           </button>
                           <button
                             onClick={() => handleOpenEditSingleVariant(v)}
-                            className="p-1.5 text-orange-400 hover:bg-orange-500/10 rounded-lg transition-all cursor-pointer"
+                            className="p-1 text-orange-400 hover:bg-orange-500/10 rounded-lg transition-all cursor-pointer"
                             title="Edit Variant"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setDeleteConfirmItem(v)}
-                            className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
+                            className="p-1 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
                             title="Delete Variant"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -792,23 +828,23 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                 <div>
                   <label className="block font-bold text-[var(--text-muted)] uppercase text-[10px] mb-1">Category *</label>
                   <select
-                    value={formData.category === 'CUSTOM' || !['Lunch', 'Breakfast', 'Fast Food', 'Refreshment', 'Burgers', 'Pizza', 'Beverages'].includes(formData.category) ? 'CUSTOM' : formData.category}
+                    value={formData.category === 'CUSTOM' || !categoryOptions.includes(formData.category) ? 'CUSTOM' : formData.category}
                     onChange={(e) => {
                       if (e.target.value === 'CUSTOM') {
                         setCustomCategory(formData.category !== 'CUSTOM' ? formData.category : '');
-                        setFormData({ ...formData, category: 'CUSTOM' });
+                        setFormData((prev) => ({ ...prev, category: 'CUSTOM' }));
                       } else {
-                        setFormData({ ...formData, category: e.target.value });
+                        setFormData((prev) => ({ ...prev, category: e.target.value }));
                       }
                     }}
                     className="w-full px-3 py-2 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 cursor-pointer font-bold"
                   >
-                    {['Lunch', 'Breakfast', 'Fast Food', 'Refreshment', 'Burgers', 'Pizza', 'Beverages'].map((cat) => (
+                    {categoryOptions.map((cat) => (
                       <option key={cat} value={cat}>{cat}</option>
                     ))}
-                    <option value="CUSTOM">+ Custom Category...</option>
+                    <option value="CUSTOM">+ Add Custom Category...</option>
                   </select>
-                  {(formData.category === 'CUSTOM' || !['Lunch', 'Breakfast', 'Fast Food', 'Refreshment', 'Burgers', 'Pizza', 'Beverages'].includes(formData.category)) && (
+                  {(formData.category === 'CUSTOM' || !categoryOptions.includes(formData.category)) && (
                     <input
                       type="text"
                       required
@@ -817,7 +853,7 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                         setCustomCategory(e.target.value);
                         setFormData((prev) => ({ ...prev, category: e.target.value }));
                       }}
-                      placeholder="Enter custom category"
+                      placeholder="Enter custom category name (e.g. Seafood)"
                       className="w-full mt-1.5 px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                     />
                   )}
@@ -906,10 +942,11 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                       <div className="w-28 sm:w-32 space-y-0.5">
                         <input
                           type="number"
-                          step="0.01"
+                          step="1"
+                          min="0"
                           required
                           value={v.price}
-                          onChange={(e) => handleVariantChange(idx, 'price', e.target.value)}
+                          onChange={(e) => handleVariantChange(idx, 'price', e.target.value ? Math.floor(Math.abs(Number(e.target.value))) : '')}
                           placeholder="Price (Rs.)"
                           className="w-full px-2.5 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded text-xs font-mono font-bold text-[var(--text-main)] focus:outline-none focus:border-orange-500"
                         />
@@ -937,8 +974,10 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                   <label className="block font-bold text-[var(--text-muted)] uppercase text-[10px] mb-1">Prep Time (mins)</label>
                   <input
                     type="number"
+                    step="1"
+                    min="0"
                     value={formData.prepTime}
-                    onChange={(e) => setFormData({ ...formData, prepTime: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, prepTime: e.target.value ? Math.floor(Math.abs(Number(e.target.value))) : '' })}
                     className="w-full px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
                   />
                 </div>
@@ -946,8 +985,10 @@ const AdminMenuView = ({ inventory = [], onRefresh, showToast }) => {
                   <label className="block font-bold text-[var(--text-muted)] uppercase text-[10px] mb-1">Initial Stock</label>
                   <input
                     type="number"
+                    step="1"
+                    min="0"
                     value={formData.stock}
-                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, stock: e.target.value ? Math.floor(Math.abs(Number(e.target.value))) : '' })}
                     className="w-full px-3 py-1.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-lg text-xs text-[var(--text-main)] focus:outline-none focus:border-orange-500 font-mono"
                   />
                 </div>

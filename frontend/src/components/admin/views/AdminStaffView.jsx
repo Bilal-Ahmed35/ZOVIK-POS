@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Users,
   UserPlus,
@@ -74,7 +75,7 @@ const AdminStaffView = ({ showToast }) => {
   const [showRoleModal, setShowRoleModal] = useState(false);
 
   const [selectedStaff, setSelectedStaff] = useState(null);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'VENDOR' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'VENDOR', isDemo: false });
   const [resetPasswordInput, setResetPasswordInput] = useState('');
   const [newRole, setNewRole] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
@@ -103,7 +104,7 @@ const AdminStaffView = ({ showToast }) => {
       await api.post('/admin/staff', formData);
       if (showToast) showToast('Staff account created & synced with Supabase Auth!');
       setShowAddModal(false);
-      setFormData({ name: '', email: '', password: '', role: 'VENDOR' });
+      setFormData({ name: '', email: '', password: '', role: 'VENDOR', isDemo: false });
       fetchStaff();
     } catch (err) {
       if (showToast) showToast(err.response?.data?.error || 'Failed to create staff account', 'error');
@@ -244,6 +245,7 @@ const AdminStaffView = ({ showToast }) => {
                 <tr className="border-b border-[var(--border-color)] bg-[var(--bg-color)]/70 text-[11px] font-semibold text-[var(--text-muted)] tracking-wide">
                   <th className="py-3.5 px-5">Staff Member</th>
                   <th className="py-3.5 px-5">Email Address</th>
+                  <th className="py-3.5 px-5">Account Type</th>
                   <th className="py-3.5 px-5">Assigned Role</th>
                   <th className="py-3.5 px-5">Status</th>
                   <th className="py-3.5 px-5">Created Date</th>
@@ -283,6 +285,21 @@ const AdminStaffView = ({ showToast }) => {
                           <Mail className="w-3.5 h-3.5 opacity-40 flex-shrink-0" />
                           <span>{staff.email}</span>
                         </div>
+                      </td>
+
+                      {/* Account Type */}
+                      <td className="py-4 px-5">
+                        {staff.isDemo ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-orange-50 text-orange-600 border border-orange-200 dark:bg-orange-900/30 dark:border-orange-800">
+                            <Lock className="w-3 h-3" />
+                            Demo
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-900/30 dark:border-emerald-800">
+                            <ShieldCheck className="w-3 h-3" />
+                            Real
+                          </span>
+                        )}
                       </td>
 
                       {/* Role Badge (Fixed whitespace & padding) */}
@@ -379,12 +396,12 @@ const AdminStaffView = ({ showToast }) => {
       {/* ══════════════════════════════════════════════════════════════════════
           MODAL: Add Staff
       ══════════════════════════════════════════════════════════════════════ */}
-      {showAddModal && (
+      {showAddModal && createPortal(
         <div
           className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={(e) => e.target === e.currentTarget && setShowAddModal(false)}
         >
-          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up">
             <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 text-orange-600 dark:text-orange-400">
@@ -476,6 +493,21 @@ const AdminStaffView = ({ showToast }) => {
                 </div>
               </div>
 
+              <div>
+                <label className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border-color)] bg-[var(--bg-color)] hover:border-orange-300 cursor-pointer transition-all">
+                  <input
+                    type="checkbox"
+                    checked={formData.isDemo}
+                    onChange={(e) => setFormData({ ...formData, isDemo: e.target.checked })}
+                    className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500 accent-orange-600"
+                  />
+                  <div className="flex-1">
+                    <div className="font-bold text-[var(--text-main)] text-xs">Create as Demo Account</div>
+                    <div className="text-[10px] text-[var(--text-muted)]">Demo accounts have Read-Only access (actions & updates are disabled).</div>
+                  </div>
+                </label>
+              </div>
+
               <div className="flex justify-end gap-2.5 pt-4 border-t border-[var(--border-color)]">
                 <button
                   type="button"
@@ -504,18 +536,19 @@ const AdminStaffView = ({ showToast }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
           MODAL: Reset Password
       ══════════════════════════════════════════════════════════════════════ */}
-      {showResetModal && selectedStaff && (
+      {showResetModal && selectedStaff && createPortal(
         <div
           className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={(e) => e.target === e.currentTarget && setShowResetModal(false)}
         >
-          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up">
             <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400">
@@ -579,18 +612,19 @@ const AdminStaffView = ({ showToast }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
           MODAL: Change Role
       ══════════════════════════════════════════════════════════════════════ */}
-      {showRoleModal && selectedStaff && (
+      {showRoleModal && selectedStaff && createPortal(
         <div
           className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={(e) => e.target === e.currentTarget && setShowRoleModal(false)}
         >
-          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+          <div className="bg-[var(--card-bg)] border border-[var(--border-color)] rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-scale-up">
             <div className="flex justify-between items-center border-b border-[var(--border-color)] pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-violet-50 dark:bg-violet-950/60 border border-violet-200 dark:border-violet-800 text-orange-600 dark:text-orange-400">
@@ -673,7 +707,8 @@ const AdminStaffView = ({ showToast }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

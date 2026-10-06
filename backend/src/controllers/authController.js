@@ -9,13 +9,14 @@ const ACCESS_SECRET = process.env.JWT_SECRET || 'pos_system_jwt_access_secret_ke
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'pos_system_jwt_refresh_secret_key_2026';
 
 const generateTokens = (user) => {
+  const isDemo = user.isDemo || false;
   const accessToken = jwt.sign(
-    { id: user.id, email: user.email, role: user.role, name: user.name, branchId: user.branchId },
+    { id: user.id, email: user.email, role: user.role, name: user.name, branchId: user.branchId, isDemo },
     ACCESS_SECRET,
     { expiresIn: '7d' }
   );
   const refreshToken = jwt.sign(
-    { id: user.id, email: user.email },
+    { id: user.id, email: user.email, isDemo },
     REFRESH_SECRET,
     { expiresIn: '30d' }
   );
@@ -121,6 +122,8 @@ const login = async (req, res) => {
       req,
     });
 
+    const isDemo = user.isDemo || false;
+
     return res.json({
       message: 'Login successful.',
       user: {
@@ -130,6 +133,7 @@ const login = async (req, res) => {
         role: user.role,
         isActive: user.isActive,
         branchId: user.branchId,
+        isDemo,
       },
       ...tokens,
     });
