@@ -100,7 +100,7 @@ const AdminOrdersView = ({ orders = [], loading, onRefresh }) => {
               <td><strong>${o.orderNumber}</strong></td>
               <td>${o.user?.name || o.user?.email || 'Guest'}</td>
               <td>${o.tableNumber || (o.tableId ? `Table ${o.tableId}` : 'Takeaway')}</td>
-              <td>Rs. ${o.total.toFixed(2)}</td>
+              <td>Rs. ${Number(o.total || 0).toFixed(2)}</td>
               <td>${o.paymentMethod}</td>
               <td><span class="badge badge-success">${o.status}</span></td>
               <td>${new Date(o.createdAt).toLocaleString()}</td>

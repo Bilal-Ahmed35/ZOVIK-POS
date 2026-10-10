@@ -31,6 +31,7 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react';
+import DemoStatusBadge from './DemoStatusBadge';
 
 const VendorDashboard = ({ user, onLogout }) => {
   const [orders, setOrders] = useState([]);
@@ -245,16 +246,38 @@ const VendorDashboard = ({ user, onLogout }) => {
     if (pendingVerifyingIds.has(orderId)) return;
     setPendingVerifyingIds((prev) => new Set(prev).add(orderId));
     setError('');
+
+    // Snapshot previous order for rollback if API call fails
+    const prevOrder = orders.find((o) => o.id === orderId);
+    const optimisticUpdatedOrder = prevOrder
+      ? { ...prevOrder, paymentStatus: 'VERIFIED', status: 'PAID' }
+      : null;
+
+    if (optimisticUpdatedOrder) {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? optimisticUpdatedOrder : o)));
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(optimisticUpdatedOrder);
+      }
+    }
+
     try {
       const response = await api.put(`/payments/${orderId}/verify`, { approve: true });
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? response.data.order : o)));
+      const finalOrder = response.data.order;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? finalOrder : o)));
       if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder(response.data.order);
+        setSelectedOrder(finalOrder);
       }
-      showToast(`Payment verified for order ${response.data.order.orderNumber || `#000${orderId}`}`);
+      showToast(`Payment verified for order ${finalOrder.orderNumber || `#000${orderId}`}`);
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || 'Failed to verify payment.');
+      // Rollback optimistic change
+      if (prevOrder) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? prevOrder : o)));
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder(prevOrder);
+        }
+      }
     } finally {
       setPendingVerifyingIds((prev) => {
         const next = new Set(prev);
@@ -268,19 +291,39 @@ const VendorDashboard = ({ user, onLogout }) => {
     if (pendingVerifyingIds.has(orderId)) return;
     setPendingVerifyingIds((prev) => new Set(prev).add(orderId));
     setError('');
+
+    const prevOrder = orders.find((o) => o.id === orderId);
+    const optimisticUpdatedOrder = prevOrder
+      ? { ...prevOrder, paymentStatus: 'FAILED', status: 'PAYMENT_FAILED' }
+      : null;
+
+    if (optimisticUpdatedOrder) {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? optimisticUpdatedOrder : o)));
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(optimisticUpdatedOrder);
+      }
+    }
+
     try {
       const response = await api.put(`/payments/${orderId}/verify`, {
         approve: false,
         reason: 'Payment verification rejected by staff.',
       });
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? response.data.order : o)));
+      const finalOrder = response.data.order;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? finalOrder : o)));
       if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder(response.data.order);
+        setSelectedOrder(finalOrder);
       }
-      showToast(`Payment rejected for order ${response.data.order.orderNumber || `#000${orderId}`}`, 'error');
+      showToast(`Payment rejected for order ${finalOrder.orderNumber || `#000${orderId}`}`, 'error');
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || 'Failed to reject payment.');
+      if (prevOrder) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? prevOrder : o)));
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder(prevOrder);
+        }
+      }
     } finally {
       setPendingVerifyingIds((prev) => {
         const next = new Set(prev);
@@ -292,26 +335,46 @@ const VendorDashboard = ({ user, onLogout }) => {
 
   const handleUpdateStatus = async (orderId, nextStatus) => {
     setError('');
+    const prevOrder = orders.find((o) => o.id === orderId);
+    const optimisticUpdatedOrder = prevOrder ? { ...prevOrder, status: nextStatus } : null;
+
+    if (optimisticUpdatedOrder) {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? optimisticUpdatedOrder : o)));
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder(optimisticUpdatedOrder);
+      }
+    }
+
     try {
       const response = await api.put(`/orders/${orderId}/status`, { status: nextStatus });
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? response.data.order : o)));
+      const finalOrder = response.data.order;
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? finalOrder : o)));
       if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder(response.data.order);
+        setSelectedOrder(finalOrder);
       }
       showToast(`Order status updated to ${nextStatus}`);
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.error || 'Failed to update order status.');
+      if (prevOrder) {
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? prevOrder : o)));
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder(prevOrder);
+        }
+      }
     }
   };
 
   const handleToggleMenu = async (itemId, currentActive) => {
+    // Immediate Optimistic Update
+    setMenu((prev) => prev.map((item) => (item.id === itemId ? { ...item, isActive: !currentActive } : item)));
     try {
       const response = await api.put(`/menu/${itemId}`, { isActive: !currentActive });
       setMenu((prev) => prev.map((item) => (item.id === itemId ? response.data.item : item)));
       showToast(`Menu item availability updated!`);
     } catch (err) {
       console.error(err);
+      setMenu((prev) => prev.map((item) => (item.id === itemId ? { ...item, isActive: currentActive } : item)));
       showToast('Failed to toggle availability', 'error');
     }
   };
@@ -512,6 +575,16 @@ const VendorDashboard = ({ user, onLogout }) => {
       <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-emerald-500/4 rounded-full blur-[140px] pointer-events-none" />
 
       <div className="max-w-7xl mx-auto space-y-5 relative z-10">
+
+        {/* Mode Indicator & Top Header */}
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--border-color)]">
+          <div className="flex items-center space-x-3">
+            <span className="text-xs font-black uppercase tracking-wider text-[var(--text-muted)]">
+              Cashier / Vendor Terminal
+            </span>
+          </div>
+          <DemoStatusBadge user={user} />
+        </div>
 
         {/* ── 1. LIVE KDS & REVENUE QUICK-STATS BAR ───────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
@@ -772,7 +845,7 @@ const VendorDashboard = ({ user, onLogout }) => {
                         <FileText className="w-3.5 h-3.5" />
                         <span>View Details</span>
                       </button>
-                      <span className="text-lg text-emerald-400 font-mono">Rs. {order.total.toFixed(2)}</span>
+                      <span className="text-lg text-emerald-400 font-mono">Rs. {Number(order.total || 0).toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -859,7 +932,7 @@ const VendorDashboard = ({ user, onLogout }) => {
                         <FileText className="w-3.5 h-3.5" />
                         <span>View Details</span>
                       </button>
-                      <span className="text-base font-extrabold text-emerald-400 font-mono">Rs. {order.total?.toFixed(2)}</span>
+                      <span className="text-base font-extrabold text-emerald-400 font-mono">Rs. {Number(order.total || 0).toFixed(2)}</span>
                     </div>
                   </div>
 
@@ -960,7 +1033,7 @@ const VendorDashboard = ({ user, onLogout }) => {
 
               <div className="pt-2 flex justify-between items-center text-sm font-extrabold border-t border-[var(--border-color)]">
                 <span className="text-[var(--text-muted)]">Total Charged:</span>
-                <span className="text-lg text-emerald-400 font-mono">Rs. {selectedOrder.total?.toFixed(2)}</span>
+                <span className="text-lg text-emerald-400 font-mono">Rs. {Number(selectedOrder.total || 0).toFixed(2)}</span>
               </div>
             </div>
 
@@ -1079,11 +1152,12 @@ const VendorDashboard = ({ user, onLogout }) => {
                   <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Price (Rs.) *</label>
                   <input
                     type="number"
-                    step="0.01"
+                    step="1"
+                    min="0"
                     required
                     value={modalData.price}
-                    onChange={(e) => setModalData({ ...modalData, price: e.target.value })}
-                    placeholder="250.00"
+                    onChange={(e) => setModalData({ ...modalData, price: e.target.value ? Math.floor(Math.abs(Number(e.target.value))) : '' })}
+                    placeholder="250"
                     className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)] font-mono"
                   />
                 </div>
@@ -1094,8 +1168,10 @@ const VendorDashboard = ({ user, onLogout }) => {
                   <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Prep Time (mins)</label>
                   <input
                     type="number"
+                    step="1"
+                    min="0"
                     value={modalData.prepTime}
-                    onChange={(e) => setModalData({ ...modalData, prepTime: e.target.value })}
+                    onChange={(e) => setModalData({ ...modalData, prepTime: e.target.value ? Math.floor(Math.abs(Number(e.target.value))) : '' })}
                     className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)] font-mono"
                   />
                 </div>
@@ -1103,8 +1179,10 @@ const VendorDashboard = ({ user, onLogout }) => {
                   <label className="block font-bold text-[var(--text-muted)] uppercase mb-1">Stock</label>
                   <input
                     type="number"
+                    step="1"
+                    min="0"
                     value={modalData.stock}
-                    onChange={(e) => setModalData({ ...modalData, stock: e.target.value })}
+                    onChange={(e) => setModalData({ ...modalData, stock: e.target.value ? Math.floor(Math.abs(Number(e.target.value))) : '' })}
                     className="w-full px-4 py-2.5 bg-[var(--bg-color)] border border-[var(--border-color)] rounded-xl text-xs text-[var(--text-main)] focus:outline-none focus:border-[var(--sb-primary)] font-mono"
                   />
                 </div>

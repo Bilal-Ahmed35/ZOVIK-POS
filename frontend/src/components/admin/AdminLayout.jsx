@@ -11,6 +11,7 @@ import {
   Shield,
   RefreshCw,
 } from 'lucide-react';
+import DemoStatusBadge from '../DemoStatusBadge';
 
 const titleMap = {
   dashboard: 'Executive Dashboard Overview',
@@ -31,11 +32,10 @@ const titleMap = {
   branches: 'Branch Management & Outlets',
 };
 
-const AdminLayout = ({ activeTab, onSelectTab, user, onLogout, children, onRefresh }) => {
+const AdminLayout = ({ activeTab, onSelectTab, user, onLogout, children, onRefresh, branches = [], selectedBranchId = 'all', onSelectBranch }) => {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('admin_sidebar_collapsed') === 'true');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark');
-  const [selectedBranch, setSelectedBranch] = useState('Main Campus Canteen');
 
   useEffect(() => {
     localStorage.setItem('admin_sidebar_collapsed', collapsed);
@@ -82,16 +82,20 @@ const AdminLayout = ({ activeTab, onSelectTab, user, onLogout, children, onRefre
                 <Menu className="w-5 h-5" />
               </button>
 
-              {/* Branch Selector Dropdown */}
+              {/* Dynamic Branch Selector Dropdown */}
               <div className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-[var(--card-bg)] border border-[var(--border-color)] text-xs text-[var(--text-muted)] font-bold shadow-sm">
                 <Building2 className="w-4 h-4 text-orange-400 shrink-0" />
                 <select
-                  value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  value={selectedBranchId}
+                  onChange={(e) => onSelectBranch && onSelectBranch(e.target.value)}
                   className="bg-transparent text-[var(--text-main)] focus:outline-none cursor-pointer font-bold"
                 >
-                  <option value="Main Campus Canteen">Main Campus Canteen</option>
-                  <option value="Hostel Block Canteen">Hostel Block Canteen</option>
+                  <option value="all">All Outlets / Branches</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -105,6 +109,11 @@ const AdminLayout = ({ activeTab, onSelectTab, user, onLogout, children, onRefre
                   <RefreshCw className="w-4 h-4 text-orange-400" />
                 </button>
               )}
+            </div>
+
+            {/* Mode Indicator Badge (Demo vs Live DB) */}
+            <div className="flex items-center space-x-3">
+              <DemoStatusBadge user={user} />
             </div>
           </div>
 

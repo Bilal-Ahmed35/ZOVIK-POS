@@ -16,6 +16,7 @@ import {
   Sparkles,
   Keyboard,
 } from 'lucide-react';
+import DemoStatusBadge from './DemoStatusBadge';
 
 const KitchenDashboard = ({ user, onLogout }) => {
   const [orders, setOrders] = useState([]);
@@ -31,6 +32,8 @@ const KitchenDashboard = ({ user, onLogout }) => {
   const [, setTick] = useState(0);
   const alertTimerRef = useRef(null);
   const shiftTimerRef = useRef(null);
+  // Tracks optimistic status changes so incoming socket events don't revert them
+  const optimisticStatusRef = useRef({});
 
   // Auto update elapsed timers every 30 seconds
   useEffect(() => {
@@ -90,7 +93,24 @@ const KitchenDashboard = ({ user, onLogout }) => {
             if (['COMPLETED', 'CANCELLED'].includes(updatedOrder.status)) {
               return prev.filter((o) => o.id !== updatedOrder.id);
             }
-            return prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o));
+            return prev.map((o) => {
+              if (o.id !== updatedOrder.id) return o;
+              // If we have an optimistic status that is further in the pipeline,
+              // don't let the socket event revert it back
+              const optimisticStatus = optimisticStatusRef.current[o.id];
+              if (optimisticStatus) {
+                const statusOrder = ['PAID', 'PREPARING', 'READY', 'COMPLETED'];
+                const optimisticIdx = statusOrder.indexOf(optimisticStatus);
+                const incomingIdx = statusOrder.indexOf(updatedOrder.status);
+                if (optimisticIdx > incomingIdx) {
+                  // Keep the optimistic (more advanced) status, merge other data
+                  return { ...updatedOrder, status: optimisticStatus };
+                }
+                // Server caught up or went further — clear the optimistic lock
+                delete optimisticStatusRef.current[o.id];
+              }
+              return updatedOrder;
+            });
           } else if (['PAID', 'PREPARING', 'READY'].includes(updatedOrder.status)) {
             return [updatedOrder, ...prev];
           }
@@ -155,6 +175,8 @@ const KitchenDashboard = ({ user, onLogout }) => {
     try {
       const response = await api.get('/orders');
       const active = response.data.orders.filter((o) => ['PAID', 'PREPARING', 'READY'].includes(o.status));
+      // Clear optimistic locks on full refresh
+      optimisticStatusRef.current = {};
       setOrders(active);
     } catch (err) {
       console.error(err);
@@ -170,25 +192,33 @@ const KitchenDashboard = ({ user, onLogout }) => {
     if (pendingStatusOrderIds.has(orderId)) return;
     setPendingStatusOrderIds((prev) => new Set(prev).add(orderId));
 
-    // Immediate Optimistic UI Feedback
+    // Record optimistic status so socket events don't revert it
+    optimisticStatusRef.current[orderId] = nextStatus;
+
+    // Immediate Optimistic UI — move card to next column instantly
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o))
     );
 
-    try {
-      await api.put(`/orders/${orderId}/status`, { status: nextStatus });
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.error || 'Failed to update order status.');
-      // Rollback on error
-      fetchActiveOrders();
-    } finally {
-      setPendingStatusOrderIds((prev) => {
-        const next = new Set(prev);
-        next.delete(orderId);
-        return next;
+    // Unlock button immediately after UI update (don't wait for API)
+    setPendingStatusOrderIds((prev) => {
+      const next = new Set(prev);
+      next.delete(orderId);
+      return next;
+    });
+
+    // Fire API in background — clear optimistic lock on completion, rollback on failure
+    api.put(`/orders/${orderId}/status`, { status: nextStatus })
+      .then(() => {
+        // API succeeded — clear the optimistic lock (server status now matches)
+        delete optimisticStatusRef.current[orderId];
+      })
+      .catch((err) => {
+        console.error(err);
+        setError(err.response?.data?.error || 'Failed to update order status.');
+        delete optimisticStatusRef.current[orderId];
+        fetchActiveOrders(); // Rollback by re-fetching
       });
-    }
   };
 
   const toggleItemCheck = (orderId, itemKey) => {
@@ -290,6 +320,8 @@ const KitchenDashboard = ({ user, onLogout }) => {
 
         {/* Hotkey Guide & Action Buttons */}
         <div className="flex items-center space-x-3 text-xs font-semibold">
+          <DemoStatusBadge user={user} />
+
           <div className="hidden lg:flex items-center space-x-2 text-[11px] text-[var(--text-muted)] bg-[var(--bg-color)] px-3 py-1.5 rounded-xl border border-[var(--border-color)]">
             <Keyboard className="w-3.5 h-3.5 text-orange-400" />
             <span><strong className="text-[var(--text-main)] font-mono">[Space]</strong> Start Cooking • <strong className="text-[var(--text-main)] font-mono">[R]</strong> Refresh • <strong className="text-[var(--text-main)] font-mono">[M]</strong> Mute</span>

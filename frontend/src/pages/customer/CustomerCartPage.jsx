@@ -52,39 +52,42 @@ const CustomerCartPage = ({ user }) => {
   const [etaInfo, setEtaInfo] = useState(null);
   const [etaLoading, setEtaLoading] = useState(false);
 
+  // ─── Safely fetch stored customer identity (ignoring staff accounts like Demo Kitchen) ───
+  const getStoredCustomerUser = () => {
+    try {
+      const savedCustomer = localStorage.getItem('customer_user') || sessionStorage.getItem('customer_user');
+      if (savedCustomer) {
+        const u = JSON.parse(savedCustomer);
+        if (u && (!u.role || u.role === 'CUSTOMER')) return u;
+      }
+    } catch {}
+
+    try {
+      const savedUser = sessionStorage.getItem('user') || localStorage.getItem('user');
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        if (u && (!u.role || u.role === 'CUSTOMER')) return u;
+      }
+    } catch {}
+
+    return null;
+  };
+
   // ─── OTP / Guest details ─────────────────────────────────────────────────
   const [guestName, setGuestName] = useState(() => {
-    const saved = localStorage.getItem('user');
-    if (saved) {
-      try {
-        const u = JSON.parse(saved);
-        if (!u.isGuest) return u.name;
-      } catch {}
-    }
-    return '';
+    const u = getStoredCustomerUser();
+    return (u && !u.isGuest) ? (u.name || '') : '';
   });
   const [guestEmail, setGuestEmail] = useState(() => {
-    const saved = localStorage.getItem('user');
-    if (saved) {
-      try {
-        const u = JSON.parse(saved);
-        if (!u.isGuest) return u.email;
-      } catch {}
-    }
-    return '';
+    const u = getStoredCustomerUser();
+    return (u && !u.isGuest) ? (u.email || '') : '';
   });
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpVerified, setOtpVerified] = useState(() => {
-    const token = localStorage.getItem('token');
-    const saved = localStorage.getItem('user');
-    if (token && saved) {
-      try {
-        const u = JSON.parse(saved);
-        return !u.isGuest;
-      } catch {}
-    }
-    return false;
+    const token = localStorage.getItem('customer_token') || localStorage.getItem('token') || sessionStorage.getItem('token');
+    const u = getStoredCustomerUser();
+    return Boolean(token && u && !u.isGuest);
   });
   const [otpLoading, setOtpLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
@@ -102,11 +105,17 @@ const CustomerCartPage = ({ user }) => {
   useEffect(() => {
     api.get('/payments/settings')
       .then(res => {
-        setPaymentSettings(res.data);
-        if (res.data.codEnabled && !res.data.onlineEnabled) {
-          setPaymentMethod('COD');
-        } else if (!res.data.codEnabled && res.data.onlineEnabled) {
-          setPaymentMethod('Easypaisa');
+        const data = res.data.settings || res.data;
+        if (data && typeof data.codEnabled === 'boolean') {
+          setPaymentSettings(data);
+          if (data.codEnabled && !data.onlineEnabled) {
+            setPaymentMethod('COD');
+          } else if (!data.codEnabled && data.onlineEnabled) {
+            setPaymentMethod('Easypaisa');
+          } else if (data.codEnabled && data.onlineEnabled) {
+            const saved = localStorage.getItem('customer_paymentMethod');
+            setPaymentMethod(saved || 'COD');
+          }
         }
       })
       .catch(err => console.warn('Payment settings fetch error:', err.message));
@@ -117,11 +126,14 @@ const CustomerCartPage = ({ user }) => {
     const socket = getSocket();
     if (socket) {
       const handlePaymentSettingsUpdate = settings => {
-        setPaymentSettings(settings);
-        if (settings.codEnabled && !settings.onlineEnabled) {
-          setPaymentMethod('COD');
-        } else if (!settings.codEnabled && settings.onlineEnabled) {
-          setPaymentMethod('Easypaisa');
+        const data = settings.settings || settings;
+        if (data && typeof data.codEnabled === 'boolean') {
+          setPaymentSettings(data);
+          if (data.codEnabled && !data.onlineEnabled) {
+            setPaymentMethod('COD');
+          } else if (!data.codEnabled && data.onlineEnabled) {
+            setPaymentMethod('Easypaisa');
+          }
         }
       };
       socket.on('paymentSettings:update', handlePaymentSettingsUpdate);
@@ -483,7 +495,7 @@ const CustomerCartPage = ({ user }) => {
             </div>
             <div className="flex justify-between items-center text-[#171717] dark:text-white font-black border-t border-[#E7E5E4] dark:border-[#3A3A3A] pt-2.5 text-sm">
               <span>Total Paid:</span>
-              <span className="text-[#E85D2A] font-mono text-base">Rs. {activeOrder.total.toFixed(2)}</span>
+              <span className="text-[#E85D2A] font-mono text-base">Rs. {Number(activeOrder.total || 0).toFixed(2)}</span>
             </div>
           </div>
 
@@ -591,7 +603,7 @@ const CustomerCartPage = ({ user }) => {
                           )}
                         </div>
                         <span className="text-[11px] font-bold text-orange-600 dark:text-orange-400 mt-0.5 block">
-                          Rs. {item.price.toFixed(2)} each
+                          Rs. {Number(item.price || 0).toFixed(2)} each
                         </span>
                         <span className="text-[10px] text-gray-400 dark:text-[#A8A29E] block">Subtotal: Rs. {(item.price * item.quantity).toFixed(2)}</span>
                       </div>

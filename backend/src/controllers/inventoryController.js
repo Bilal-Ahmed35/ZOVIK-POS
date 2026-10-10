@@ -1,3 +1,4 @@
+const { generateRealAIInsightsWithGroq } = require('../services/groqService');
 const { prisma } = require('../config/db');
 const { getInventoryForecast } = require('../services/aiService');
 const { emitToAdmin, emitToVendor } = require('../sockets/socket');
@@ -138,6 +139,35 @@ const getInventoryItems = async (req, res) => {
       orderBy: { name: 'asc' }
     });
 
+    // Deduplicate: if the same item name appears multiple times (e.g. across branches or
+    // due to manual duplicates), merge them into a single canonical record.
+    // We keep the record with the highest stockLevel as the primary, and sum up stock.
+    if (!branchId) {
+      const seen = new Map();
+      for (const item of items) {
+        const key = item.name.trim().toLowerCase();
+        if (!seen.has(key)) {
+          seen.set(key, { ...item });
+        } else {
+          // Merge: sum stock levels, keep other fields from the first (primary) record
+          const existing = seen.get(key);
+          existing.stockLevel = (parseFloat(existing.stockLevel) || 0) + (parseFloat(item.stockLevel) || 0);
+          // Use the lower minThreshold (more conservative)
+          existing.minThreshold = Math.min(
+            parseFloat(existing.minThreshold) || 0,
+            parseFloat(item.minThreshold) || 0
+          );
+          // If current has a supplier and primary doesn't, use current's supplier
+          if (!existing.supplier && item.supplier) {
+            existing.supplier = item.supplier;
+            existing.supplierId = item.supplierId;
+          }
+        }
+      }
+      const deduped = Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name));
+      return res.json({ items: deduped });
+    }
+
     return res.json({ items });
   } catch (error) {
     console.error('Fetch inventory error:', error);
@@ -276,6 +306,41 @@ const updateInventoryItem = async (req, res) => {
   } catch (error) {
     console.error('Update inventory item error:', error);
     return res.status(500).json({ error: 'Failed to update inventory item.' });
+  }
+};
+
+/**
+ * Delete an inventory item (and related logs/recipes safely)
+ */
+const deleteInventoryItem = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const invId = parseInt(id, 10);
+    const existing = await prisma.inventoryItem.findUnique({
+      where: { id: invId }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Inventory item not found.' });
+    }
+
+    // Clean up dependent records safely in transaction
+    await prisma.$transaction(async (tx) => {
+      await tx.recipeItem.deleteMany({ where: { inventoryItemId: invId } });
+      await tx.inventoryLog.deleteMany({ where: { inventoryItemId: invId } });
+      await tx.inventoryReceivingItem.deleteMany({ where: { inventoryItemId: invId } });
+      await tx.inventoryItem.delete({ where: { id: invId } });
+    });
+
+    emitToAdmin('inventory:delete', { id: invId });
+    emitToVendor('inventory:delete', { id: invId });
+    logAudit(req.user?.id || 1, 'DELETE_ITEM', 'InventoryItem', invId, { name: existing.name });
+
+    return res.json({ message: `Inventory item "${existing.name}" deleted successfully.` });
+  } catch (error) {
+    console.error('Delete inventory item error:', error);
+    return res.status(500).json({ error: 'Failed to delete inventory item.' });
   }
 };
 
@@ -572,7 +637,7 @@ const getRecipeMargins = async (req, res) => {
  */
 const getExpiringItems = async (req, res) => {
   try {
-    const items = await prisma.inventoryItem.findMany({
+    const itemLevelExpiring = await prisma.inventoryItem.findMany({
       where: {
         expiryDate: { not: null }
       },
@@ -580,16 +645,65 @@ const getExpiringItems = async (req, res) => {
       orderBy: { expiryDate: 'asc' }
     });
 
-    const now = new Date();
-    const enriched = items.map((item) => {
-      const daysUntilExpiry = Math.ceil((new Date(item.expiryDate) - now) / (1000 * 60 * 60 * 24));
-      return {
-        ...item,
-        daysUntilExpiry
-      };
+    const batchLevelExpiring = await prisma.inventoryReceivingItem.findMany({
+      where: {
+        expiryDate: { not: null },
+        receiving: { status: 'RECEIVED' }
+      },
+      include: {
+        inventoryItem: { include: { supplier: true, branch: true } },
+        receiving: { include: { supplier: true } }
+      },
+      orderBy: { expiryDate: 'asc' }
     });
 
-    return res.json({ items: enriched });
+    const now = new Date();
+    const expiryMap = new Map();
+
+    // Map item level expiries
+    for (const item of itemLevelExpiring) {
+      const daysUntilExpiry = Math.ceil((new Date(item.expiryDate) - now) / (1000 * 60 * 60 * 24));
+      expiryMap.set(`item-${item.id}`, {
+        id: item.id,
+        inventoryItemId: item.id,
+        name: item.name,
+        category: item.category,
+        unit: item.unit,
+        stockLevel: item.stockLevel,
+        expiryDate: item.expiryDate,
+        batchNumber: item.batchNumber || null,
+        daysUntilExpiry,
+        supplier: item.supplier || null,
+        branch: item.branch || null,
+        source: 'ITEM'
+      });
+    }
+
+    // Map batch level expiries
+    for (const bItem of batchLevelExpiring) {
+      if (!bItem.inventoryItem) continue;
+      const key = bItem.batchNumber ? `batch-${bItem.inventoryItemId}-${bItem.batchNumber}` : `rec-${bItem.id}`;
+      const daysUntilExpiry = Math.ceil((new Date(bItem.expiryDate) - now) / (1000 * 60 * 60 * 24));
+      expiryMap.set(key, {
+        id: bItem.inventoryItem.id,
+        receivingItemId: bItem.id,
+        inventoryItemId: bItem.inventoryItem.id,
+        name: bItem.inventoryItem.name,
+        category: bItem.inventoryItem.category,
+        unit: bItem.unit || bItem.inventoryItem.unit,
+        stockLevel: bItem.quantity,
+        expiryDate: bItem.expiryDate,
+        batchNumber: bItem.batchNumber || null,
+        daysUntilExpiry,
+        supplier: bItem.receiving?.supplier || bItem.inventoryItem.supplier || null,
+        branch: bItem.inventoryItem.branch || null,
+        source: 'BATCH'
+      });
+    }
+
+    const combined = Array.from(expiryMap.values()).sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate));
+
+    return res.json({ items: combined });
   } catch (error) {
     console.error('Fetch expiring items error:', error);
     return res.status(500).json({ error: 'Failed to retrieve expiring inventory items.' });
@@ -603,7 +717,7 @@ const getSuppliers = async (req, res) => {
   try {
     const suppliers = await prisma.supplier.findMany({
       include: {
-        _count: { select: { items: true } }
+        _count: { select: { inventoryItems: true, receivings: true } }
       },
       orderBy: { name: 'asc' }
     });
@@ -620,25 +734,154 @@ const getSuppliers = async (req, res) => {
 const createSupplier = async (req, res) => {
   const { name, contactPerson, email, phone, address, notes } = req.body;
 
-  if (!name) {
+  if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Supplier name is required.' });
   }
 
+  const cleanName = name.trim();
+
   try {
+    const existing = await prisma.supplier.findFirst({
+      where: { name: { equals: cleanName, mode: 'insensitive' } }
+    });
+
+    if (existing) {
+      return res.status(409).json({
+        error: `A supplier named "${existing.name}" already exists.`,
+        existingSupplier: existing
+      });
+    }
+
     const supplier = await prisma.supplier.create({
       data: {
-        name,
-        contactPerson: contactPerson || null,
-        email: email || null,
-        phone: phone || null,
-        address: address || null,
-        notes: notes || null
+        name: cleanName,
+        contactPerson: contactPerson ? contactPerson.trim() : null,
+        email: email ? email.trim() : null,
+        phone: phone ? phone.trim() : null,
+        address: address ? address.trim() : null,
+        notes: notes ? notes.trim() : null
       }
     });
+
+    await logAudit({
+      userId: req.user.id,
+      action: 'SUPPLIER_CREATED',
+      entity: 'Supplier',
+      entityId: String(supplier.id),
+      newValue: { name: supplier.name },
+      req
+    });
+
     return res.status(201).json({ message: 'Supplier created successfully.', supplier });
   } catch (error) {
     console.error('Create supplier error:', error);
     return res.status(500).json({ error: 'Failed to create supplier.' });
+  }
+};
+
+/**
+ * Update Supplier
+ */
+const updateSupplier = async (req, res) => {
+  const { id } = req.params;
+  const { name, contactPerson, email, phone, address, notes } = req.body;
+
+  try {
+    const existing = await prisma.supplier.findUnique({
+      where: { id: parseInt(id, 10) }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Supplier not found.' });
+    }
+
+    if (name && name.trim().toLowerCase() !== existing.name.toLowerCase()) {
+      const duplicate = await prisma.supplier.findFirst({
+        where: {
+          name: { equals: name.trim(), mode: 'insensitive' },
+          id: { not: existing.id }
+        }
+      });
+      if (duplicate) {
+        return res.status(409).json({
+          error: `Another supplier named "${duplicate.name}" already exists.`,
+          existingSupplier: duplicate
+        });
+      }
+    }
+
+    const updated = await prisma.supplier.update({
+      where: { id: existing.id },
+      data: {
+        name: name ? name.trim() : existing.name,
+        contactPerson: contactPerson !== undefined ? (contactPerson ? contactPerson.trim() : null) : existing.contactPerson,
+        email: email !== undefined ? (email ? email.trim() : null) : existing.email,
+        phone: phone !== undefined ? (phone ? phone.trim() : null) : existing.phone,
+        address: address !== undefined ? (address ? address.trim() : null) : existing.address,
+        notes: notes !== undefined ? (notes ? notes.trim() : null) : existing.notes,
+      }
+    });
+
+    await logAudit({
+      userId: req.user.id,
+      action: 'SUPPLIER_UPDATED',
+      entity: 'Supplier',
+      entityId: String(updated.id),
+      oldValue: { name: existing.name },
+      newValue: { name: updated.name },
+      req
+    });
+
+    return res.json({ message: 'Supplier updated successfully.', supplier: updated });
+  } catch (error) {
+    console.error('Update supplier error:', error);
+    return res.status(500).json({ error: 'Failed to update supplier.' });
+  }
+};
+
+/**
+ * Delete / Archive Supplier
+ */
+const deleteSupplier = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const existing = await prisma.supplier.findUnique({
+      where: { id: parseInt(id, 10) },
+      include: {
+        _count: { select: { receivings: true, inventoryItems: true } }
+      }
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Supplier not found.' });
+    }
+
+    const totalHistory = (existing._count?.receivings || 0) + (existing._count?.inventoryItems || 0);
+
+    if (totalHistory > 0) {
+      return res.status(400).json({
+        error: `Cannot delete supplier "${existing.name}" because they have ${existing._count.receivings} receiving records and ${existing._count.inventoryItems} linked items. Historical records retain this supplier.`,
+        isArchivable: true
+      });
+    }
+
+    await prisma.supplier.delete({
+      where: { id: existing.id }
+    });
+
+    await logAudit({
+      userId: req.user.id,
+      action: 'SUPPLIER_DELETED',
+      entity: 'Supplier',
+      entityId: String(existing.id),
+      oldValue: { name: existing.name },
+      req
+    });
+
+    return res.json({ message: 'Supplier deleted successfully.' });
+  } catch (error) {
+    console.error('Delete supplier error:', error);
+    return res.status(500).json({ error: 'Failed to delete supplier.' });
   }
 };
 
@@ -780,41 +1023,56 @@ const getInventoryAlerts = async (req, res) => {
 
     const features = { weekday, month, season, weather, weatherString, exams_season, promotions };
 
+    // Batch fetch all menu items, demand forecasts, and recent 7-day order items in 3 parallel queries
+    const past7DaysStart = new Date();
+    past7DaysStart.setDate(past7DaysStart.getDate() - 7);
+    past7DaysStart.setHours(0, 0, 0, 0);
+
+    const [allMenuItems, allForecasts, recentOrderItems] = await Promise.all([
+      prisma.menuItem.findMany({ select: { id: true, name: true } }),
+      prisma.demandForecast.findMany(),
+      prisma.orderItem.findMany({
+        where: {
+          order: {
+            status: { in: ['PAID', 'PREPARING', 'READY', 'COMPLETED'] },
+            createdAt: { gte: past7DaysStart }
+          }
+        },
+        select: {
+          menuItemId: true,
+          quantity: true,
+          order: { select: { createdAt: true } }
+        }
+      })
+    ]);
+
+    const menuItemMap = new Map(allMenuItems.map(m => [m.name.toLowerCase(), m.id]));
+    const forecastMap = new Map(allForecasts.map(f => [f.menuItemName.toLowerCase(), f]));
+
     const alerts = [];
 
     for (const item of items) {
-      const past7Days = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        d.setHours(0, 0, 0, 0);
-        return d;
-      }).reverse();
+      const lowerName = item.name.toLowerCase();
+      const menuItemId = menuItemMap.get(lowerName);
 
-      const menuItem = await prisma.menuItem.findFirst({
-        where: { name: item.name }
-      });
-
-      const historicalSales = [];
       let orderCount = 0;
+      const historicalSales = [];
 
-      if (menuItem) {
-        const orderItems = await prisma.orderItem.findMany({
-          where: {
-            menuItemId: menuItem.id,
-            order: {
-              status: { in: ['PAID', 'PREPARING', 'READY', 'COMPLETED'] },
-              createdAt: { gte: past7Days[0] }
-            }
-          },
-          include: { order: true }
-        });
+      if (menuItemId) {
+        const itemOrderItems = recentOrderItems.filter(oi => oi.menuItemId === menuItemId);
+        orderCount = itemOrderItems.length;
 
-        orderCount = orderItems.length;
+        const past7Days = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - i);
+          d.setHours(0, 0, 0, 0);
+          return d;
+        }).reverse();
 
         for (const day of past7Days) {
           const nextDay = new Date(day);
           nextDay.setDate(nextDay.getDate() + 1);
-          const dailyQty = orderItems
+          const dailyQty = itemOrderItems
             .filter(oi => oi.order.createdAt >= day && oi.order.createdAt < nextDay)
             .reduce((sum, oi) => sum + oi.quantity, 0);
           historicalSales.push(dailyQty);
@@ -823,12 +1081,26 @@ const getInventoryAlerts = async (req, res) => {
         historicalSales.push(10, 12, 14, 11, 15, 13, 16);
       }
 
-      const prediction = await getOrCalculateForecast(item, historicalSales, features, false);
-      const forecast = prediction.forecast;
-      const percentChange = prediction.percentChange || 0.0;
+      // Check fast in-memory forecast cache
+      const cachedForecast = forecastMap.get(lowerName);
+      let forecast = item.minThreshold * 1.5;
+      let percentChange = 0.0;
+      let source = 'heuristic';
+
+      if (cachedForecast) {
+        forecast = cachedForecast.predictedQty;
+        source = 'database-cache';
+        try {
+          const feat = JSON.parse(cachedForecast.features || '{}');
+          percentChange = feat.percentChange || 0.0;
+        } catch {}
+      } else {
+        // Simple fast heuristic if no forecast generated yet
+        const sumSales = historicalSales.reduce((a, b) => a + b, 0);
+        forecast = sumSales > 0 ? (sumSales / historicalSales.length) : Math.max(item.minThreshold * 1.2, 5);
+      }
 
       const confidenceBadge = orderCount >= 30 ? 'HIGH' : (orderCount >= 10 ? 'MEDIUM' : 'LOW_HISTORY');
-
       const isLow = item.stockLevel <= item.minThreshold;
       const isStockoutPredicted = item.stockLevel < forecast;
 
@@ -867,7 +1139,7 @@ const getInventoryAlerts = async (req, res) => {
           suggestedRestock,
           stockoutDate,
           confidenceBadge,
-          source: prediction.source
+          source
         });
       }
     }
@@ -957,6 +1229,48 @@ const recalculateInventoryForecasts = async (req, res) => {
 /**
  * Get list of stock receiving transactions with optional filters
  */
+
+/**
+ * Generate unique receiving reference RCV-YYYYMMDD-XXX
+ */
+const generateReceivingRef = async (req, res) => {
+  try {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    const datePrefix = `RCV-${yyyy}${mm}${dd}`;
+
+    const existing = await prisma.inventoryReceiving.findMany({
+      where: {
+        OR: [
+          { invoiceNumber: { startsWith: datePrefix } },
+          { receivingNumber: { startsWith: datePrefix } }
+        ]
+      },
+      select: { invoiceNumber: true, receivingNumber: true }
+    });
+
+    let maxSeq = 0;
+    for (const item of existing) {
+      const refStr = item.invoiceNumber || item.receivingNumber;
+      if (refStr) {
+        const parts = refStr.split('-');
+        if (parts.length >= 3) {
+          const num = parseInt(parts[2], 10);
+          if (!isNaN(num) && num > maxSeq) maxSeq = num;
+        }
+      }
+    }
+
+    const reference = `${datePrefix}-${String(maxSeq + 1).padStart(3, '0')}`;
+    return res.json({ reference });
+  } catch (error) {
+    const fallbackDate = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    return res.json({ reference: `RCV-${fallbackDate}-001` });
+  }
+};
+
 const getReceivings = async (req, res) => {
   const { status, supplierId, branchId, search } = req.query;
   try {
@@ -1039,8 +1353,8 @@ const createReceiving = async (req, res) => {
 
   try {
     const year = new Date().getFullYear();
-    const count = await prisma.inventoryReceiving.count();
-    const receivingNumber = `REC-${year}-${String(count + 1).padStart(4, '0')}`;
+    const timestamp = Date.now().toString().slice(-6);
+    const receivingNumber = `REC-${year}-${timestamp}`;
 
     const resolvedBranchId = branchId ? parseInt(branchId, 10) : (req.user?.branchId || 1);
     const resolvedSupplierId = supplierId ? parseInt(supplierId, 10) : null;
@@ -1110,15 +1424,18 @@ const createReceiving = async (req, res) => {
           const qtyBefore = existingItem.stockLevel;
           const qtyAfter = qtyBefore + item.quantity;
           const newCost = item.unitCost > 0 ? item.unitCost : existingItem.costPrice;
-          const newExpiry = item.expiryDate || existingItem.expiryDate;
+
+          const updateData = {
+            stockLevel: qtyAfter,
+            costPrice: newCost,
+          };
+          if (item.expiryDate) {
+            updateData.expiryDate = item.expiryDate;
+          }
 
           await tx.inventoryItem.update({
             where: { id: existingItem.id },
-            data: {
-              stockLevel: qtyAfter,
-              costPrice: newCost,
-              expiryDate: newExpiry,
-            }
+            data: updateData
           });
 
           await tx.inventoryLog.create({
@@ -1205,15 +1522,18 @@ const confirmReceiving = async (req, res) => {
         const qtyBefore = existingItem.stockLevel;
         const qtyAfter = qtyBefore + item.quantity;
         const newCost = item.unitCost > 0 ? item.unitCost : existingItem.costPrice;
-        const newExpiry = item.expiryDate || existingItem.expiryDate;
+
+        const updateData = {
+          stockLevel: qtyAfter,
+          costPrice: newCost,
+        };
+        if (item.expiryDate) {
+          updateData.expiryDate = item.expiryDate;
+        }
 
         await tx.inventoryItem.update({
           where: { id: existingItem.id },
-          data: {
-            stockLevel: qtyAfter,
-            costPrice: newCost,
-            expiryDate: newExpiry,
-          }
+          data: updateData
         });
 
         await tx.inventoryLog.create({
@@ -1351,11 +1671,604 @@ const previewAiOcrInvoice = async (req, res) => {
   }
 };
 
+
+const aiInsightsCache = new Map();
+const AI_INSIGHTS_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes cache
+
+/**
+ * Real AI Machine Learning Insights & Demand Intelligence via Groq LLM
+ */
+const getSmartAIInsights = async (req, res) => {
+  const { branchId, forceRefresh, refresh } = req.query;
+  const branchKey = branchId || 'all';
+  const shouldBypassCache = forceRefresh === 'true' || refresh === 'true';
+
+  if (!shouldBypassCache && aiInsightsCache.has(branchKey)) {
+    const cachedEntry = aiInsightsCache.get(branchKey);
+    if (Date.now() - cachedEntry.timestamp < AI_INSIGHTS_CACHE_TTL_MS) {
+      return res.json(cachedEntry.payload);
+    }
+  }
+
+  const branchFilter = (branchId && branchId !== 'all') ? { branchId: parseInt(branchId, 10) } : {};
+
+  try {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const [
+      items,
+      recentUsageLogs,
+      completedOrders30Days,
+      menuItemsWithRecipes,
+      etaRecords,
+      oldestOrder,
+    ] = await Promise.all([
+      prisma.inventoryItem.findMany({
+        where: branchFilter,
+        include: { supplier: true, branch: true }
+      }),
+      prisma.inventoryLog.findMany({
+        where: {
+          type: 'USAGE',
+          createdAt: { gte: sevenDaysAgo },
+          ...(branchFilter.branchId ? { inventoryItem: { branchId: branchFilter.branchId } } : {})
+        }
+      }),
+      prisma.order.findMany({
+        where: {
+          status: { in: ['PAID', 'PREPARING', 'READY', 'COMPLETED'] },
+          createdAt: { gte: thirtyDaysAgo },
+          ...branchFilter,
+        },
+        include: {
+          orderItems: { include: { menuItem: { include: { recipeItems: true } } } }
+        }
+      }),
+      prisma.menuItem.findMany({
+        where: branchFilter,
+        include: { recipeItems: { include: { inventoryItem: true } } }
+      }),
+      prisma.eTAPrediction.findMany({
+        where: { actualTime: { not: null } },
+        take: 50,
+        orderBy: { createdAt: 'desc' }
+      }),
+      prisma.order.findFirst({
+        where: branchFilter,
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true }
+      })
+    ]);
+
+    // Calculate usage rates per inventory item over last 7 days
+    const itemUsage7DaysMap = {};
+    recentUsageLogs.forEach(log => {
+      const id = log.inventoryItemId;
+      itemUsage7DaysMap[id] = (itemUsage7DaysMap[id] || 0) + Math.abs(log.changeQty);
+    });
+
+    let lowStockCount = 0;
+    let criticalCount = 0;
+    let totalValuation = 0.0;
+    let expiringCount = 0;
+
+    const stockRiskAlerts = [];
+
+    for (const item of items) {
+      if (item.stockLevel <= item.minThreshold) lowStockCount++;
+      if (item.stockLevel <= item.minThreshold / 2) criticalCount++;
+      totalValuation += item.stockLevel * (item.costPrice || 0);
+
+      const isExpiringSoon = item.expiryDate && new Date(item.expiryDate) <= sevenDaysFromNow;
+      if (isExpiringSoon) expiringCount++;
+
+      const usage7Days = itemUsage7DaysMap[item.id] || 0;
+      const dailyUsageRate = usage7Days / 7;
+      const projected7DayDemand = parseFloat((dailyUsageRate * 7).toFixed(1));
+      const suggestedRestock = Math.max(0, Math.ceil((projected7DayDemand + item.minThreshold) - item.stockLevel));
+
+      const hasSalesHistory = usage7Days > 0;
+
+      let confidenceBadge = 'HIGH';
+      if (!hasSalesHistory) confidenceBadge = 'LOW';
+      else if (usage7Days < 5) confidenceBadge = 'MEDIUM';
+
+      let riskMessage = null;
+      if (item.stockLevel <= 0) {
+        riskMessage = `Stock is depleted (0 ${item.unit}). Immediate restock needed.`;
+      } else if (item.stockLevel <= item.minThreshold / 2) {
+        riskMessage = `Critical stock level (${item.stockLevel} ${item.unit}). High risk of stockout.`;
+        confidenceBadge = 'HIGH';
+      } else if (item.stockLevel <= item.minThreshold) {
+        riskMessage = `Stock (${item.stockLevel} ${item.unit}) is below safety threshold (${item.minThreshold} ${item.unit}).`;
+      } else if (isExpiringSoon) {
+        riskMessage = `Batch expiring within 7 days on ${new Date(item.expiryDate).toLocaleDateString()}.`;
+      } else if (!hasSalesHistory) {
+        riskMessage = `Not enough completed POS sales are available to produce a reliable demand forecast.`;
+      }
+
+      if (riskMessage || suggestedRestock > 0) {
+        stockRiskAlerts.push({
+          id: item.id,
+          name: item.name,
+          currentStock: item.stockLevel,
+          minThreshold: item.minThreshold,
+          unit: item.unit || 'PCS',
+          confidenceBadge,
+          hasSalesHistory,
+          message: riskMessage || `Projected 7-day demand is ~${projected7DayDemand} ${item.unit}.`,
+          forecast: projected7DayDemand,
+          forecastLabel: hasSalesHistory ? `~${projected7DayDemand} ${item.unit}` : 'Insufficient Sales History',
+          suggestedRestock: suggestedRestock > 0 ? suggestedRestock : (item.stockLevel <= item.minThreshold ? Math.ceil(item.minThreshold * 1.5 - item.stockLevel) : 0),
+        });
+      }
+    }
+
+    // Factual Food Cost & Margin Calculations for Menu Items
+    const foodCostOptimization = [];
+    const highFoodCostItems = [];
+
+    menuItemsWithRecipes.forEach(m => {
+      let recipeCost = 0.0;
+      m.recipeItems.forEach(r => {
+        if (r.inventoryItem) {
+          recipeCost += r.quantity * (r.inventoryItem.costPrice || 0);
+        }
+      });
+
+      if (m.price > 0 && recipeCost > 0) {
+        const foodCostPct = (recipeCost / m.price) * 100;
+        const grossMargin = m.price - recipeCost;
+        if (foodCostPct > 35) {
+          highFoodCostItems.push({
+            name: m.name,
+            sellingPrice: m.price,
+            recipeCost: parseFloat(recipeCost.toFixed(2)),
+            foodCostPct: parseFloat(foodCostPct.toFixed(1)),
+            grossMargin: parseFloat(grossMargin.toFixed(2))
+          });
+        }
+      }
+    });
+
+    if (highFoodCostItems.length > 0) {
+      highFoodCostItems.sort((a, b) => b.foodCostPct - a.foodCostPct);
+      highFoodCostItems.slice(0, 3).forEach(item => {
+        foodCostOptimization.push({
+          title: `High Food Cost: ${item.name}`,
+          impact: item.foodCostPct > 50 ? 'High' : 'Medium',
+          description: `Food cost ratio is ${item.foodCostPct}% (Cost: Rs.${item.recipeCost}, Selling Price: Rs.${item.sellingPrice}). Review supplier prices or portion sizes to improve margin.`
+        });
+      });
+    } else {
+      foodCostOptimization.push({
+        title: 'Supplier Purchasing Optimization',
+        impact: 'Medium',
+        description: 'Review main supplier pricing for high-usage ingredients to maximize gross profit margins.'
+      });
+    }
+
+    // Kitchen Prep Time Calculation (Req 12)
+    let avgPrepTimeMins = null;
+    let avgPrepTimeLabel = "Not Enough Data";
+    let isActualPrepTime = false;
+
+    if (etaRecords.length >= 3) {
+      const totalActual = etaRecords.reduce((s, r) => s + (r.actualTime || 0), 0);
+      avgPrepTimeMins = parseFloat((totalActual / etaRecords.length).toFixed(1));
+      avgPrepTimeLabel = `${avgPrepTimeMins} mins`;
+      isActualPrepTime = true;
+    } else if (menuItemsWithRecipes.length > 0) {
+      const totalConfigured = menuItemsWithRecipes.reduce((s, m) => s + (m.prepTime || 5), 0);
+      avgPrepTimeMins = parseFloat((totalConfigured / menuItemsWithRecipes.length).toFixed(1));
+      avgPrepTimeLabel = `${avgPrepTimeMins} mins (configured)`;
+      isActualPrepTime = false;
+    }
+
+    // Model Prediction Accuracy (Req 11)
+    let predictionAccuracy = null;
+    let accuracyLabel = "Not Enough Data";
+    let accuracyHelper = "Prediction accuracy will appear after enough forecast history is available.";
+
+    if (etaRecords.length >= 10) {
+      const varianceList = etaRecords.map(r => Math.abs(r.adjustedEta - (r.actualTime || r.adjustedEta)));
+      const avgVariance = varianceList.reduce((s, v) => s + v, 0) / etaRecords.length;
+      const basePrep = avgPrepTimeMins || 8;
+      predictionAccuracy = parseFloat(Math.max(60, Math.min(99, 100 - (avgVariance / basePrep) * 100)).toFixed(1));
+      accuracyLabel = `${predictionAccuracy}%`;
+      accuracyHelper = "Evaluated against actual POS transaction trends";
+    }
+
+    // POS Data Confidence Score (Req 13)
+    const oldestDate = oldestOrder?.createdAt ? new Date(oldestOrder.createdAt) : now;
+    const dateSpanDays = Math.max(1, Math.ceil((now - oldestDate) / (1000 * 60 * 60 * 24)));
+    const totalOrdersCountAllTime = completedOrders30Days.length;
+
+    let posConfidenceScore = 'LOW — Limited Data';
+    if (totalOrdersCountAllTime >= 50 && dateSpanDays >= 14) {
+      posConfidenceScore = 'HIGH';
+    } else if (totalOrdersCountAllTime >= 10 && dateSpanDays >= 3) {
+      posConfidenceScore = 'MEDIUM';
+    }
+
+    const posConfidenceExplanation = `Based on ${totalOrdersCountAllTime} completed order(s) over ${dateSpanDays} day(s)`;
+
+    // Call Groq LLM for AI analysis with multi-key failover
+    const inventoryStatsPayload = {
+      totalItems: items.length,
+      lowStockCount,
+      criticalCount,
+      totalValuation: Math.round(totalValuation),
+      expiringCount,
+      stockRiskAlerts: stockRiskAlerts.slice(0, 5)
+    };
+
+    const salesSummaryPayload = {
+      totalOrders30Days: completedOrders30Days.length,
+      dateSpanDays
+    };
+
+    const kitchenStatsPayload = {
+      avgPrepTime: avgPrepTimeMins,
+      isActualPrepTime
+    };
+
+    let aiGroqResult = null;
+    try {
+      aiGroqResult = await generateRealAIInsightsWithGroq({
+        inventoryStats: inventoryStatsPayload,
+        salesSummary: salesSummaryPayload,
+        kitchenStats: kitchenStatsPayload
+      });
+    } catch (groqErr) {
+      console.warn('[GroqService] Groq call failed across all keys:', groqErr.message);
+    }
+
+    const isAiAvailable = !!aiGroqResult;
+    const aiErrorMessage = isAiAvailable ? null : 'AI analysis is temporarily unavailable.';
+
+    const executiveSummary = aiGroqResult?.executiveSummary || 
+      (isAiAvailable ? `Monitored ${items.length} inventory items across ${completedOrders30Days.length} recent order(s).` : null);
+
+    const finalOptimizations = (aiGroqResult?.foodCostOptimization && aiGroqResult.foodCostOptimization.length > 0)
+      ? aiGroqResult.foodCostOptimization
+      : (isAiAvailable ? foodCostOptimization : []);
+
+    const payload = {
+      success: true,
+      aiAvailable: isAiAvailable,
+      aiErrorMessage,
+      insights: {
+        predictionAccuracy,
+        accuracyLabel,
+        accuracyHelper,
+        avgPrepTimeMins,
+        avgPrepTimeLabel,
+        isActualPrepTime,
+        stockRiskAlerts: stockRiskAlerts.slice(0, 10),
+        foodCostOptimization: finalOptimizations,
+        executiveSummary,
+        posConfidenceScore,
+        posConfidenceExplanation,
+        totalInventoryItems: items.length,
+        lowStockCount,
+        totalValuation: Math.round(totalValuation)
+      }
+    };
+
+    if (isAiAvailable) {
+      aiInsightsCache.set(branchKey, { payload, timestamp: Date.now() });
+    }
+
+    return res.json(payload);
+  } catch (error) {
+    console.error('getSmartAIInsights error:', error);
+    return res.status(500).json({ error: 'Failed to generate AI insights.' });
+  }
+};
+
+/**
+ * AI Suggest ingredients for a MenuItem using existing inventory catalog items only
+ */
+const suggestRecipeForMenuItem = async (req, res) => {
+  const { menuItemId } = req.body;
+  if (!menuItemId) {
+    return res.status(400).json({ error: 'menuItemId is required.' });
+  }
+
+  try {
+    const menuItem = await prisma.menuItem.findUnique({
+      where: { id: parseInt(menuItemId, 10) }
+    });
+
+    if (!menuItem) {
+      return res.status(404).json({ error: 'Menu item not found.' });
+    }
+
+    const inventoryItems = await prisma.inventoryItem.findMany({
+      select: { id: true, name: true, category: true, unit: true, costPrice: true }
+    });
+
+    let suggestions = [];
+
+    try {
+      const prompt = `You are a professional chef & inventory system manager.
+Menu Item Name: "${menuItem.name}"
+Category: "${menuItem.category || 'General'}"
+Description: "${menuItem.description || ''}"
+
+Available Inventory Catalog:
+${JSON.stringify(inventoryItems.map(i => ({ id: i.id, name: i.name, unit: i.unit, category: i.category })))}
+
+CRITICAL RULE: You MUST ONLY suggest ingredients that exist in the Available Inventory Catalog list above. Do NOT invent new ingredient names.
+
+Return ONLY a raw JSON array of objects with keys:
+- "inventoryItemId": integer (matching exact id from catalog)
+- "quantity": number (typical quantity for 1 serving, e.g. 0.15 for 150g in KG, 1 for PCS, 0.02 for 20g in KG)
+- "unit": string (matching unit from catalog or standard sub-unit like G, ML, PCS, KG)
+- "reason": brief string explanation`;
+
+      const groqRes = await callGroqAPI({
+        model: getGroqModel(),
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2
+      });
+
+      const rawContent = groqRes?.choices?.[0]?.message?.content || '[]';
+      const cleanJson = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleanJson);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        suggestions = parsed;
+      }
+    } catch (aiErr) {
+      console.warn('Groq AI recipe suggestion API error, switching to rule-based fallback:', aiErr.message);
+    }
+
+    if (!suggestions || suggestions.length === 0) {
+      const nameLower = menuItem.name.toLowerCase();
+      suggestions = inventoryItems
+        .filter(inv => {
+          const invLower = inv.name.toLowerCase();
+          return nameLower.includes(invLower) || invLower.split(' ').some(w => w.length > 3 && nameLower.includes(w));
+        })
+        .slice(0, 6)
+        .map(inv => ({
+          inventoryItemId: inv.id,
+          quantity: inv.unit === 'KG' ? 0.15 : (inv.unit === 'G' ? 150 : 1),
+          unit: inv.unit,
+          reason: 'Matched from catalog'
+        }));
+    }
+
+    const result = suggestions
+      .map(s => {
+        const inv = inventoryItems.find(i => i.id === parseInt(s.inventoryItemId, 10));
+        if (!inv) return null;
+        return {
+          inventoryItemId: inv.id,
+          name: inv.name,
+          unit: s.unit || inv.unit,
+          inventoryUnit: inv.unit,
+          quantity: parseFloat(s.quantity) || 1,
+          costPrice: inv.costPrice,
+          isAiSuggested: true,
+          reason: s.reason || 'AI Match'
+        };
+      })
+      .filter(Boolean);
+
+    return res.json({ suggestions: result });
+  } catch (error) {
+    console.error('Suggest recipe error:', error);
+    return res.status(500).json({ error: 'Failed to generate AI recipe suggestions.' });
+  }
+};
+
+/**
+ * Bulk import standard preset recipes for POS menu items using existing inventory
+ */
+const bulkImportPresetRecipes = async (req, res) => {
+  try {
+    const menuItems = await prisma.menuItem.findMany();
+    const inventoryItems = await prisma.inventoryItem.findMany();
+
+    const PRESET_MAPPINGS = {
+      'Zinger Burger': [
+        { name: 'Chicken Fillet', qty: 0.15, unit: 'KG' },
+        { name: 'Burger Bun', qty: 1, unit: 'PCS' },
+        { name: 'Fresh Lettuce', qty: 0.02, unit: 'KG' },
+        { name: 'Mayonnaise Sauce', qty: 0.02, unit: 'KG' },
+        { name: 'Cooking Oil', qty: 0.05, unit: 'L' }
+      ],
+      'Classic Beef Cheeseburger': [
+        { name: 'Burger Bun', qty: 1, unit: 'PCS' },
+        { name: 'Cheddar Cheese Slices', qty: 1, unit: 'PCS' },
+        { name: 'Fresh Lettuce', qty: 0.02, unit: 'KG' },
+        { name: 'Mayonnaise Sauce', qty: 0.015, unit: 'KG' }
+      ],
+      'Chicken Tikka Supreme Pizza': [
+        { name: 'Pizza Dough Base', qty: 1, unit: 'PCS' },
+        { name: 'Mozzarella Cheese', qty: 0.15, unit: 'KG' },
+        { name: 'Chicken Boti / Tikka', qty: 0.2, unit: 'KG' },
+        { name: 'Pizza Sauce', qty: 0.08, unit: 'KG' },
+        { name: 'Fresh Onions', qty: 0.03, unit: 'KG' }
+      ],
+      'Margherita Pizza': [
+        { name: 'Pizza Dough Base', qty: 1, unit: 'PCS' },
+        { name: 'Mozzarella Cheese', qty: 0.18, unit: 'KG' },
+        { name: 'Pizza Sauce', qty: 0.08, unit: 'KG' }
+      ],
+      'Special Chicken Biryani': [
+        { name: 'Basmati Rice', qty: 0.25, unit: 'KG' },
+        { name: 'Chicken Whole', qty: 0.25, unit: 'KG' },
+        { name: 'Cooking Oil', qty: 0.04, unit: 'L' },
+        { name: 'Biryani Spice Mix', qty: 0.015, unit: 'KG' },
+        { name: 'Fresh Onions', qty: 0.05, unit: 'KG' }
+      ],
+      'Creamy Chicken Alfredo Pasta': [
+        { name: 'Penne Pasta', qty: 0.15, unit: 'KG' },
+        { name: 'Chicken Fillet', qty: 0.12, unit: 'KG' },
+        { name: 'Heavy Cooking Cream', qty: 0.1, unit: 'L' },
+        { name: 'Mozzarella Cheese', qty: 0.04, unit: 'KG' }
+      ],
+      'Fresh Mango Thick Shake': [
+        { name: 'Fresh Milk', qty: 0.25, unit: 'L' },
+        { name: 'Sugar', qty: 0.03, unit: 'KG' }
+      ],
+      'Special Karak Doodh Chai': [
+        { name: 'Fresh Milk', qty: 0.2, unit: 'L' },
+        { name: 'Black Tea Leaves (Chai Patti)', qty: 0.01, unit: 'KG' },
+        { name: 'Sugar', qty: 0.015, unit: 'KG' }
+      ]
+    };
+
+    let count = 0;
+
+    await prisma.$transaction(async (tx) => {
+      for (const [menuName, items] of Object.entries(PRESET_MAPPINGS)) {
+        const menuItem = menuItems.find(m => m.name.toLowerCase().trim() === menuName.toLowerCase().trim());
+        if (!menuItem) continue;
+
+        const toCreate = [];
+        for (const ing of items) {
+          const invItem = inventoryItems.find(i => 
+            i.name.toLowerCase().trim().includes(ing.name.toLowerCase().trim()) ||
+            ing.name.toLowerCase().trim().includes(i.name.toLowerCase().trim())
+          );
+          if (invItem) {
+            toCreate.push({
+              menuItemId: menuItem.id,
+              inventoryItemId: invItem.id,
+              quantity: ing.qty,
+              unit: ing.unit
+            });
+          }
+        }
+
+        if (toCreate.length > 0) {
+          await tx.recipeItem.deleteMany({ where: { menuItemId: menuItem.id } });
+          for (const item of toCreate) {
+            await tx.recipeItem.create({ data: item });
+          }
+          count++;
+        }
+      }
+    });
+
+    return res.json({ message: `Successfully imported recipe presets for ${count} menu items.` });
+  } catch (error) {
+    console.error('Bulk import recipe error:', error);
+    return res.status(500).json({ error: 'Failed to bulk import recipe presets.' });
+  }
+};
+
+const updateBatchExpiry = async (req, res) => {
+  const { source, receivingItemId, inventoryItemId, expiryDate, batchNumber, receivingRef, invoiceNumber } = req.body;
+
+  try {
+    const formattedExpiry = expiryDate ? new Date(expiryDate) : null;
+
+    if (receivingItemId || source === 'BATCH') {
+      const recItemId = parseInt(receivingItemId, 10);
+      if (isNaN(recItemId)) {
+        return res.status(400).json({ error: 'Valid receivingItemId is required.' });
+      }
+
+      const existing = await prisma.inventoryReceivingItem.findUnique({
+        where: { id: recItemId },
+        include: { receiving: true, inventoryItem: true }
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Receiving item record not found.' });
+      }
+
+      const updatedRecItem = await prisma.inventoryReceivingItem.update({
+        where: { id: recItemId },
+        data: {
+          expiryDate: formattedExpiry,
+          ...(batchNumber !== undefined && batchNumber !== null ? { batchNumber: String(batchNumber).trim() } : {})
+        },
+        include: {
+          inventoryItem: { include: { supplier: true, branch: true } },
+          receiving: { include: { supplier: true } }
+        }
+      });
+
+      // Update parent receiving record invoiceNumber & receivingNumber if updated
+      if (existing.receivingId && (receivingRef || invoiceNumber)) {
+        await prisma.inventoryReceiving.update({
+          where: { id: existing.receivingId },
+          data: {
+            ...(receivingRef ? { receivingNumber: String(receivingRef).trim() } : {}),
+            ...(invoiceNumber ? { invoiceNumber: String(invoiceNumber).trim() } : {}),
+          }
+        }).catch(() => null);
+      }
+
+      // Update associated catalog item expiry date if relevant
+      if (existing.inventoryItemId) {
+        await prisma.inventoryItem.update({
+          where: { id: existing.inventoryItemId },
+          data: {
+            expiryDate: formattedExpiry,
+            ...(batchNumber ? { sku: String(batchNumber).trim() } : {})
+          }
+        }).catch(() => null);
+      }
+
+      emitToAdmin('inventory:updated', { type: 'BATCH_EXPIRY_UPDATE', item: updatedRecItem });
+      emitToVendor('inventory:updated', { type: 'BATCH_EXPIRY_UPDATE', item: updatedRecItem });
+      logAudit(req.user?.id || 1, 'UPDATE_BATCH_EXPIRY', 'InventoryReceivingItem', recItemId, { expiryDate, batchNumber });
+
+      return res.json({ message: 'Batch expiry updated successfully.', item: updatedRecItem });
+    } else if (inventoryItemId || source === 'ITEM') {
+      const invId = parseInt(inventoryItemId, 10);
+      if (isNaN(invId)) {
+        return res.status(400).json({ error: 'Valid inventoryItemId is required.' });
+      }
+
+      const existing = await prisma.inventoryItem.findUnique({
+        where: { id: invId }
+      });
+
+      if (!existing) {
+        return res.status(404).json({ error: 'Inventory item not found.' });
+      }
+
+      const updatedItem = await prisma.inventoryItem.update({
+        where: { id: invId },
+        data: {
+          expiryDate: formattedExpiry,
+          ...(batchNumber !== undefined && batchNumber !== null ? { sku: String(batchNumber).trim() } : {})
+        },
+        include: { supplier: true, branch: true }
+      });
+
+      emitToAdmin('inventory:updated', { type: 'ITEM_EXPIRY_UPDATE', item: updatedItem });
+      emitToVendor('inventory:updated', { type: 'ITEM_EXPIRY_UPDATE', item: updatedItem });
+      logAudit(req.user?.id || 1, 'UPDATE_ITEM_EXPIRY', 'InventoryItem', invId, { expiryDate, batchNumber });
+
+      return res.json({ message: 'Inventory item expiry updated successfully.', item: updatedItem });
+    } else {
+      return res.status(400).json({ error: 'Missing receivingItemId or inventoryItemId.' });
+    }
+  } catch (error) {
+    console.error('Update batch expiry error:', error);
+    return res.status(500).json({ error: 'Failed to update batch expiry date.' });
+  }
+};
+
 module.exports = {
+  getSmartAIInsights,
   getInventorySummary,
   getInventoryItems,
   addInventoryItem,
   updateInventoryItem,
+  deleteInventoryItem,
   stockIn,
   adjustStock,
   restockItem,
@@ -1363,17 +2276,23 @@ module.exports = {
   saveRecipeForMenuItem,
   getRecipeMargins,
   getExpiringItems,
+  updateBatchExpiry,
   getSuppliers,
   createSupplier,
+  updateSupplier,
+  deleteSupplier,
   getInventoryLogs,
   getForecast,
   getInventoryAlerts,
   recalculateInventoryForecasts,
   getReceivings,
+  generateReceivingRef,
   getReceivingById,
   createReceiving,
   confirmReceiving,
   cancelReceiving,
   previewImportCSV,
   previewAiOcrInvoice,
+  suggestRecipeForMenuItem,
+  bulkImportPresetRecipes,
 };

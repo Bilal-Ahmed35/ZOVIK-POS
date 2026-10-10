@@ -1,4 +1,5 @@
 const { prisma } = require('../config/db');
+const { convertUnit } = require('../utils/unitConverter');
 
 /**
  * Helper to ensure a cart exists for a session
@@ -29,6 +30,33 @@ const getOrCreateCart = async (sessionId) => {
   }
 
   return cart;
+};
+
+/**
+ * Helper to check stock availability for a menu item based on recipes or static stock
+ */
+const verifyStockForQty = (menuItem, qty) => {
+  if (menuItem.recipeItems && menuItem.recipeItems.length > 0) {
+    for (const recipe of menuItem.recipeItems) {
+      const invItem = recipe.inventoryItem;
+      if (!invItem) continue;
+      const rawNeeded = recipe.quantity * qty;
+      let neededInInvUnit = rawNeeded;
+      try {
+        neededInInvUnit = convertUnit(rawNeeded, recipe.unit, invItem.unit);
+      } catch (convErr) {
+        neededInInvUnit = rawNeeded;
+      }
+      if (invItem.stockLevel < neededInInvUnit) {
+        return `Insufficient inventory for "${invItem.name}". Needed: ${neededInInvUnit} ${invItem.unit}, Available: ${invItem.stockLevel} ${invItem.unit}.`;
+      }
+    }
+    return null;
+  }
+  if (menuItem.stock > 0 && menuItem.stock < qty) {
+    return `Only ${menuItem.stock} units available in stock.`;
+  }
+  return null;
 };
 
 /**
@@ -98,14 +126,20 @@ const addItemToCart = async (req, res) => {
   try {
     const menuItem = await prisma.menuItem.findUnique({
       where: { id: parseInt(menuItemId, 10) },
+      include: {
+        recipeItems: {
+          include: { inventoryItem: true }
+        }
+      }
     });
 
     if (!menuItem || !menuItem.isActive) {
       return res.status(404).json({ error: 'Menu item is unavailable or deactivated.' });
     }
 
-    if (menuItem.stock < quantity) {
-      return res.status(400).json({ error: `Only ${menuItem.stock} units available in stock.` });
+    const stockError = verifyStockForQty(menuItem, parseInt(quantity, 10));
+    if (stockError) {
+      return res.status(400).json({ error: stockError });
     }
 
     const cart = await getOrCreateCart(sessionId);
@@ -120,8 +154,9 @@ const addItemToCart = async (req, res) => {
 
     if (existingItem) {
       const newQuantity = existingItem.quantity + parseInt(quantity, 10);
-      if (menuItem.stock < newQuantity) {
-        return res.status(400).json({ error: `Cannot add more. Stock limit is ${menuItem.stock}.` });
+      const updatedStockError = verifyStockForQty(menuItem, newQuantity);
+      if (updatedStockError) {
+        return res.status(400).json({ error: updatedStockError });
       }
 
       await prisma.cartItem.update({
@@ -173,7 +208,15 @@ const updateCartItem = async (req, res) => {
           { menuItemId: parsedId },
         ],
       },
-      include: { menuItem: true },
+      include: {
+        menuItem: {
+          include: {
+            recipeItems: {
+              include: { inventoryItem: true }
+            }
+          }
+        }
+      },
     });
 
     if (!cartItem) {
@@ -184,8 +227,11 @@ const updateCartItem = async (req, res) => {
     if (newQty <= 0) {
       await prisma.cartItem.delete({ where: { id: cartItem.id } });
     } else {
-      if (cartItem.menuItem && cartItem.menuItem.stock < newQty) {
-        return res.status(400).json({ error: `Stock limit exceeded. Only ${cartItem.menuItem.stock} available.` });
+      if (cartItem.menuItem) {
+        const updateStockErr = verifyStockForQty(cartItem.menuItem, newQty);
+        if (updateStockErr) {
+          return res.status(400).json({ error: updateStockErr });
+        }
       }
 
       await prisma.cartItem.update({

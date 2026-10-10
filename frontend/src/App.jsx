@@ -10,6 +10,8 @@ import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import api, { setActiveAuthTokens } from './services/api';
 import { connectSocket, disconnectSocket } from './services/socket';
 import { Sun, Moon, Flame, CreditCard, ShieldCheck, User } from 'lucide-react';
+import DemoRestrictionModal from './components/DemoRestrictionModal';
+import RoleChangeModal from './components/RoleChangeModal';
 
 function App() {
   const navigate = useNavigate();
@@ -70,56 +72,10 @@ function App() {
     }
   }, []);
 
-  // Auto role session sync for demo navigation (bypassed on login pages)
+  // Protect routes and require explicit login (bypasses auto-login clash)
   useEffect(() => {
-    const path = location.pathname;
-    if (path.includes('/login')) return;
-
-    let requiredRole = null;
-    if (path.startsWith('/admin')) requiredRole = 'ADMIN';
-    else if (path.startsWith('/cashier') || path.startsWith('/vendor')) requiredRole = 'VENDOR';
-    else if (path.startsWith('/kitchen')) requiredRole = 'KITCHEN';
-
-    if (requiredRole && user.role !== requiredRole) {
-      setAuthLoading(true);
-      autoAuthenticateRole(requiredRole).finally(() => {
-        setAuthLoading(false);
-      });
-    }
+    // If not logged in as expected role, protected routes redirect to corresponding login page
   }, [location.pathname, user.role]);
-
-  const autoAuthenticateRole = async (targetRole) => {
-    let email = 'customer@zovikpos.com';
-    let prefix = 'customer';
-    if (targetRole === 'ADMIN') { email = 'admin@zovikpos.com'; prefix = 'admin'; }
-    else if (targetRole === 'VENDOR') { email = 'cashier@zovikpos.com'; prefix = 'vendor'; }
-    else if (targetRole === 'KITCHEN') { email = 'kitchen@zovikpos.com'; prefix = 'kitchen'; }
-
-    try {
-      let response;
-      try {
-        response = await api.post('/auth/login', { email, password: 'Redline742454' });
-      } catch (e1) {
-        // Fallback for demo password
-        response = await api.post('/auth/login', { email, password: 'password123' });
-      }
-      const { user: loggedInUser, accessToken, refreshToken } = response.data;
-      setActiveAuthTokens(accessToken, refreshToken);
-      if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem('user', JSON.stringify(loggedInUser));
-      }
-      localStorage.setItem(`${prefix}_user`, JSON.stringify(loggedInUser));
-      localStorage.setItem('user', JSON.stringify(loggedInUser));
-
-      setUser(loggedInUser);
-      connectSocket(loggedInUser);
-    } catch (err) {
-      console.warn('Auto-authentication fallback for role:', targetRole, err.message);
-      const simulatedUser = { ...user, role: targetRole };
-      setUser(simulatedUser);
-      connectSocket(simulatedUser);
-    }
-  };
 
   const handleLoginSuccess = (loggedInUser, tokens) => {
     const rolePrefix = loggedInUser.role?.toLowerCase() || 'user';
@@ -188,6 +144,11 @@ function App() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-color)] text-[var(--text-main)] flex flex-col transition-colors duration-300">
+      {/* Global Demo Restriction Alert Popup Modal */}
+      <DemoRestrictionModal onLogout={handleLogout} />
+      {/* Global Real-Time Account Role Change & Deactivation Alert Modal */}
+      <RoleChangeModal currentUser={user} onLogout={handleLogout} />
+
       {/* Top Application Header – hidden on customer routes and login pages */}
       {!isCustomerRoute && !isLoginRoute && (
         <div className="bg-[var(--card-bg)] border-b border-[var(--border-color)] px-6 py-3 flex justify-between items-center z-40 transition-colors duration-300 shadow-sm">

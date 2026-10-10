@@ -2,8 +2,22 @@ const { prisma } = require('../config/db');
 const { generateQR } = require('../utils/generateQRCode');
 const { broadcastEvent } = require('../sockets/socket');
 
+const menuCache = new Map();
+const MENU_CACHE_TTL_MS = 10 * 1000;
+
+const clearMenuCache = () => menuCache.clear();
+
 const getAllItems = async (req, res) => {
-  const { all } = req.query;
+  const { all, refresh } = req.query;
+  const cacheKey = `menu_${all === 'true' ? 'all' : 'active'}`;
+
+  if (refresh !== 'true' && menuCache.has(cacheKey)) {
+    const cached = menuCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < MENU_CACHE_TTL_MS) {
+      return res.json(cached.payload);
+    }
+  }
+
   try {
     const whereClause = {};
     if (all !== 'true') {
@@ -43,7 +57,9 @@ const getAllItems = async (req, res) => {
       };
     });
 
-    return res.json({ items: enrichedItems });
+    const payload = { items: enrichedItems };
+    menuCache.set(cacheKey, { timestamp: Date.now(), payload });
+    return res.json(payload);
   } catch (error) {
     console.error('Fetch menu items error:', error);
     return res.status(500).json({ error: 'Failed to retrieve menu items.' });
@@ -87,6 +103,7 @@ const createItem = async (req, res) => {
         isActive: isActive !== undefined ? Boolean(isActive) : true
       }
     });
+    clearMenuCache();
     broadcastEvent('menu:update', item);
     return res.status(201).json({ message: 'Menu item created successfully.', item });
   } catch (error) {
@@ -124,6 +141,7 @@ const updateItem = async (req, res) => {
       where: { id: parseInt(id) },
       data: updateData
     });
+    clearMenuCache();
     broadcastEvent('menu:update', item);
     return res.json({ message: 'Menu item updated successfully.', item });
   } catch (error) {
@@ -146,6 +164,7 @@ const deleteItem = async (req, res) => {
     // Delete image from storage after successful DB removal
     if (existing) await deleteImageByUrl(existing.imageUrl);
 
+    clearMenuCache();
     broadcastEvent('menu:update', { ...item, deleted: true });
     return res.json({ message: 'Menu item deleted successfully from database.', item });
   } catch (error) {
@@ -156,6 +175,7 @@ const deleteItem = async (req, res) => {
         data: { isActive: false }
       });
       // For soft delete, image stays since the record still exists (deactivated)
+      clearMenuCache();
       broadcastEvent('menu:update', item);
       return res.json({ message: 'Menu item deactivated (soft deleted) successfully due to order history references.', item });
     } catch (softError) {

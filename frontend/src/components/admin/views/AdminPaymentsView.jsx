@@ -123,7 +123,7 @@ const AdminPaymentsView = ({ orders = [], onRefresh, showToast }) => {
               <td><strong>${p.orderNumber}</strong></td>
               <td>${p.customerName}</td>
               <td>${p.tableId}</td>
-              <td>Rs. ${p.amount.toFixed(2)}</td>
+              <td>Rs. ${Number(p.amount || 0).toFixed(2)}</td>
               <td>${p.method}</td>
               <td>${p.transactionId}</td>
               <td><span class="badge badge-success">${p.paymentStatus}</span></td>
@@ -233,7 +233,7 @@ const AdminPaymentsView = ({ orders = [], onRefresh, showToast }) => {
                         <span className="text-[10px] text-[var(--text-muted)] block">{p.customerEmail}</span>
                       </td>
                       <td className="p-4 font-bold">{p.tableId}</td>
-                      <td className="p-4 font-mono font-extrabold text-emerald-400">Rs. {p.amount.toFixed(2)}</td>
+                      <td className="p-4 font-mono font-extrabold text-emerald-400">Rs. {Number(p.amount || 0).toFixed(2)}</td>
                       <td className="p-4">
                         <span className="px-2.5 py-1 rounded-md text-[10px] font-extrabold bg-[var(--bg-color)] border border-[var(--border-color)] uppercase">
                           {p.method}

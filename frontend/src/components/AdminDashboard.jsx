@@ -36,6 +36,8 @@ const AdminDashboard = ({ user, onLogout }) => {
   };
 
   const [period, setPeriod] = useState('day');
+  const [branches, setBranches] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState('all');
   const [stats, setStats] = useState(null);
   const [menuItems, setMenuItems] = useState([]);
   const [inventory, setInventory] = useState([]);
@@ -53,41 +55,60 @@ const AdminDashboard = ({ user, onLogout }) => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  useEffect(() => {
+    api.get('/admin/branches')
+      .then(res => setBranches(res.data.branches || []))
+      .catch(err => console.error('Fetch branches error:', err));
+  }, []);
+
   const fetchDashboardData = async () => {
     setLoading(true);
-    try {
-      const [statsRes, menuRes, invRes, logsRes, alertsRes, ordersRes, auditRes] = await Promise.all([
-        api.get(`/admin/stats?period=${period}`),
-        api.get('/menu?all=true'),
-        api.get('/inventory'),
-        api.get('/inventory/logs'),
-        api.get('/inventory/alerts'),
-        api.get('/orders'),
-        api.get('/admin/audit-logs'),
-      ]);
 
-      setStats(statsRes.data);
-      setMenuItems(menuRes.data.items || []);
-      setInventory(invRes.data.items || []);
-      setLogs(logsRes.data.logs || []);
-      setAlerts(alertsRes.data.alerts || []);
-      setAlertsContext(alertsRes.data.context || null);
-      setAdminOrders(ordersRes.data.orders || []);
-      setAuditLogs(auditRes.data.logs || []);
-    } catch (err) {
-      console.error('Fetch admin dashboard data error:', err);
-    } finally {
-      setLoading(false);
-    }
+    const bQuery = selectedBranchId && selectedBranchId !== 'all' ? `&branchId=${selectedBranchId}` : '';
+    const bQuerySingle = selectedBranchId && selectedBranchId !== 'all' ? `?branchId=${selectedBranchId}` : '';
+
+    api.get(`/admin/stats?period=${period}${bQuery}`)
+      .then(res => setStats(res.data))
+      .catch(err => console.error('Fetch stats error:', err))
+      .finally(() => setLoading(false));
+
+    api.get(`/menu?all=true${bQuery}`)
+      .then(res => setMenuItems(res.data.items || []))
+      .catch(err => console.error('Fetch menu error:', err));
+
+    api.get(`/inventory${bQuerySingle}`)
+      .then(res => setInventory(res.data.items || []))
+      .catch(err => console.error('Fetch inventory error:', err));
+
+    api.get(`/orders?period=${period}${bQuery}`)
+      .then(res => setAdminOrders(res.data.orders || []))
+      .catch(err => console.error('Fetch orders error:', err));
+
+    api.get('/inventory/logs')
+      .then(res => setLogs(res.data.logs || []))
+      .catch(err => console.error('Fetch logs error:', err));
+
+    api.get('/inventory/alerts')
+      .then(res => {
+        setAlerts(res.data.alerts || []);
+        setAlertsContext(res.data.context || null);
+      })
+      .catch(err => console.error('Fetch alerts error:', err));
+
+    api.get('/admin/audit-logs')
+      .then(res => setAuditLogs(res.data.logs || []))
+      .catch(err => console.error('Fetch audit logs error:', err));
   };
 
   const fetchLightData = async () => {
     try {
+      const bQuery = selectedBranchId && selectedBranchId !== 'all' ? `&branchId=${selectedBranchId}` : '';
+      const bQuerySingle = selectedBranchId && selectedBranchId !== 'all' ? `?branchId=${selectedBranchId}` : '';
       const [statsRes, menuRes, invRes, ordersRes] = await Promise.all([
-        api.get(`/admin/stats?period=${period}`),
-        api.get('/menu?all=true'),
-        api.get('/inventory'),
-        api.get('/orders'),
+        api.get(`/admin/stats?period=${period}${bQuery}`),
+        api.get(`/menu?all=true${bQuery}`),
+        api.get(`/inventory${bQuerySingle}`),
+        api.get(`/orders?period=${period}${bQuery}`),
       ]);
       setStats(statsRes.data);
       setMenuItems(menuRes.data.items || []);
@@ -102,7 +123,7 @@ const AdminDashboard = ({ user, onLogout }) => {
     if (user && user.role === 'ADMIN') {
       fetchDashboardData();
     }
-  }, [user, period]);
+  }, [user, period, selectedBranchId]);
 
   // Real-time socket sync
   useEffect(() => {
@@ -153,6 +174,9 @@ const AdminDashboard = ({ user, onLogout }) => {
       user={user}
       onLogout={onLogout}
       onRefresh={fetchDashboardData}
+      branches={branches}
+      selectedBranchId={selectedBranchId}
+      onSelectBranch={setSelectedBranchId}
     >
       {/* Toast Notification */}
       {toastMessage && (
@@ -210,13 +234,23 @@ const AdminDashboard = ({ user, onLogout }) => {
           stats={stats}
           alerts={alerts}
           alertsContext={alertsContext}
+          selectedBranchId={selectedBranchId}
           onRecalculateAI={handleRecalculateAI}
           forecastingLoading={forecastingLoading}
         />
       )}
 
       {activeTab === 'reports' && (
-        <AdminReportsView stats={stats} orders={adminOrders} inventory={inventory} period={period} setPeriod={setPeriod} />
+        <AdminReportsView
+          stats={stats}
+          orders={adminOrders}
+          inventory={inventory}
+          branches={branches}
+          selectedBranchId={selectedBranchId}
+          period={period}
+          setPeriod={setPeriod}
+          onRefresh={fetchDashboardData}
+        />
       )}
 
       {activeTab === 'notifications' && (

@@ -478,3 +478,27 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   CUSTOM CALENDAR DATE PICKER STYLING
+   Enforces native calendar popup picker icon on click for all date inputs
+   ═══════════════════════════════════════════════════════════════ */
+
+input[type="date"] {
+  position: relative;
+  color-scheme: dark light;
+  cursor: pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.6) sepia(1) saturate(5) hue-rotate(350deg);
+  opacity: 0.85;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  padding: 4px;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}

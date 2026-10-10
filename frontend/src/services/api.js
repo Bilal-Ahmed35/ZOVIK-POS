@@ -188,6 +188,38 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Check if role was changed or account deactivated by backend
+    if (
+      error.response &&
+      (error.response.status === 403 || error.response.status === 401) &&
+      (error.response.data?.code === 'ROLE_CHANGED' ||
+        error.response.data?.error?.includes('role has been updated') ||
+        error.response.data?.error?.includes('deactivated'))
+    ) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('show-role-change-modal', {
+            detail: {
+              newRole: error.response.data?.newRole || 'VENDOR',
+              isActive: error.response.data?.error?.includes('deactivated') ? false : true,
+              message: error.response.data?.error || 'Your account role or status was updated by Administrator.',
+            },
+          })
+        );
+      }
+    }
+
+    // Check if demo write operation was restricted by backend
+    if (
+      error.response &&
+      (error.response.status === 403 || error.response.status === 401) &&
+      (error.response.data?.isDemo || error.response.data?.error?.includes('Demo'))
+    ) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('show-demo-restriction-modal', { detail: error.response.data }));
+      }
+    }
+
     if (
       error.response &&
       error.response.status === 401 &&

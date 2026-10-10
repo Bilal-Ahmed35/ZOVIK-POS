@@ -169,28 +169,48 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   // pendingQty: { [variantId]: number } — EACH VARIANT has its own quantity, independent
   const [pendingQty, setPendingQty] = useState({});
 
+  // ─── Safely fetch stored customer identity (ignoring staff accounts like Demo Kitchen) ───
+  const getStoredCustomerUser = () => {
+    try {
+      const savedCustomer = localStorage.getItem('customer_user') || sessionStorage.getItem('customer_user');
+      if (savedCustomer) {
+        const u = JSON.parse(savedCustomer);
+        if (u && (!u.role || u.role === 'CUSTOMER')) return u;
+      }
+    } catch {}
+
+    try {
+      const savedUser = sessionStorage.getItem('user') || localStorage.getItem('user');
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        if (u && (!u.role || u.role === 'CUSTOMER')) return u;
+      }
+    } catch {}
+
+    return null;
+  };
+
+  const checkIsCustomerLoggedIn = () => {
+    const savedToken = localStorage.getItem('customer_token') || localStorage.getItem('token') || sessionStorage.getItem('token');
+    const u = getStoredCustomerUser();
+    return Boolean(savedToken && u && !u.isGuest);
+  };
+
   // ─── Session OTP Verification State ──────────────────────────────────────
   const [isSessionVerified, setIsSessionVerified] = useState(() => {
-    const savedUser = sessionStorage.getItem('user') || localStorage.getItem('customer_user');
-    const savedToken = sessionStorage.getItem('token') || localStorage.getItem('customer_token');
+    if (checkIsCustomerLoggedIn()) return true;
     const savedSession = localStorage.getItem('customer_sessionId');
     const verifiedSessionId = localStorage.getItem('customer_verifiedSessionId');
-    return Boolean(savedUser && savedToken && savedSession && verifiedSessionId === savedSession);
+    return Boolean(savedSession && verifiedSessionId === savedSession);
   });
 
   const [authName, setAuthName] = useState(() => {
-    const saved = sessionStorage.getItem('user') || localStorage.getItem('customer_user');
-    if (saved) {
-      try { return JSON.parse(saved).name || ''; } catch { }
-    }
-    return '';
+    const u = getStoredCustomerUser();
+    return u ? (u.name || '') : '';
   });
   const [authEmail, setAuthEmail] = useState(() => {
-    const saved = sessionStorage.getItem('user') || localStorage.getItem('customer_user');
-    if (saved) {
-      try { return JSON.parse(saved).email || ''; } catch { }
-    }
-    return '';
+    const u = getStoredCustomerUser();
+    return u ? (u.email || '') : '';
   });
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -294,11 +314,18 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
             localStorage.setItem('customer_tableToken', cleanRouteToken);
             setTableError('');
 
-            const verifiedSessionId = localStorage.getItem('customer_verifiedSessionId');
-            if (s.customerId && verifiedSessionId === s.id) {
+            const isUserLoggedIn = checkIsCustomerLoggedIn();
+
+            if (isUserLoggedIn) {
+              localStorage.setItem('customer_verifiedSessionId', s.id);
               setIsSessionVerified(true);
-            } else if (!s.customerId) {
-              setIsSessionVerified(false);
+            } else {
+              const verifiedSessionId = localStorage.getItem('customer_verifiedSessionId');
+              if (s.customerId && verifiedSessionId === s.id) {
+                setIsSessionVerified(true);
+              } else if (!s.customerId) {
+                setIsSessionVerified(false);
+              }
             }
 
             fetchServerCart(s.id);
@@ -326,7 +353,16 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
               const tName = s.table?.tableNumber || `Table ${s.table?.id}`;
               setTableId(tName);
               localStorage.setItem('customer_tableId', tName);
-              setIsSessionVerified(false);
+              
+              const isUserLoggedIn = checkIsCustomerLoggedIn();
+
+              if (isUserLoggedIn) {
+                localStorage.setItem('customer_verifiedSessionId', s.id);
+                setIsSessionVerified(true);
+              } else {
+                setIsSessionVerified(false);
+              }
+
               fetchServerCart(s.id);
               checkForExistingOrder(s.id);
             }
@@ -430,9 +466,17 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
         localStorage.setItem('customer_sessionId', newSessionId);
         localStorage.setItem('customer_tableId', newTableDisplay);
         localStorage.setItem('customer_tableToken', pendingTableToken);
-        localStorage.removeItem('customer_verifiedSessionId');
 
-        setIsSessionVerified(false);
+        const isUserLoggedIn = checkIsCustomerLoggedIn();
+
+        if (isUserLoggedIn) {
+          localStorage.setItem('customer_verifiedSessionId', newSessionId);
+          setIsSessionVerified(true);
+        } else {
+          localStorage.removeItem('customer_verifiedSessionId');
+          setIsSessionVerified(false);
+        }
+
         setOtpSent(false);
         setOtpCode('');
 
@@ -750,10 +794,16 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   const totalCartQuantity = Object.values(cart).reduce((sum, item) => sum + item.quantity, 0);
   const totalCartPrice = Object.values(cart).reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  // Default Categories List
-  const defaultCategories = ['All', 'Lunch', 'Breakfast', 'Fast Food', 'Refreshment'];
-  const dynamicCategories = Array.from(new Set(menu.map((i) => i.category).filter(Boolean)));
-  const combinedCategories = Array.from(new Set([...defaultCategories, ...dynamicCategories]));
+  // Dynamic Categories: Only show categories that ACTUALLY contain active items in the menu (plus 'All')
+  const combinedCategories = useMemo(() => {
+    const presentCats = new Set();
+    menu.forEach((i) => {
+      if (i.category && i.isAvailable !== false && i.isActive !== false) {
+        presentCats.add(i.category);
+      }
+    });
+    return ['All', ...Array.from(presentCats)];
+  }, [menu]);
 
   // Filtering
   const filteredMenu = menu.filter((item) => {
@@ -838,18 +888,59 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
   const handleTouchEnd = () => {
     if (!touchStartX.current || !touchEndX.current) return;
     const diffX = touchStartX.current - touchEndX.current;
-    const minSwipeDistance = 40; // minimum 40px swipe threshold
+    const minSwipeDistance = 40;
 
     if (diffX > minSwipeDistance) {
-      // Swiped Left -> Next slide
       goToSlide((promoIndex + 1) % promoSlides.length);
     } else if (diffX < -minSwipeDistance) {
-      // Swiped Right -> Previous slide
       goToSlide((promoIndex - 1 + promoSlides.length) % promoSlides.length);
     }
 
     touchStartX.current = 0;
     touchEndX.current = 0;
+  };
+
+  // Category Bar Mouse Drag-to-Scroll & Wheel Scroll
+  const categoryScrollRef = React.useRef(null);
+  const isMouseDownRef = React.useRef(false);
+  const startXRef = React.useRef(0);
+  const scrollLeftRef = React.useRef(0);
+  const isDraggingRef = React.useRef(false);
+
+  const handleCategoryMouseDown = (e) => {
+    isMouseDownRef.current = true;
+    isDraggingRef.current = false;
+    startXRef.current = e.pageX - (categoryScrollRef.current?.offsetLeft || 0);
+    scrollLeftRef.current = categoryScrollRef.current?.scrollLeft || 0;
+  };
+
+  const handleCategoryMouseLeave = () => {
+    isMouseDownRef.current = false;
+  };
+
+  const handleCategoryMouseUp = () => {
+    isMouseDownRef.current = false;
+  };
+
+  const handleCategoryMouseMove = (e) => {
+    if (!isMouseDownRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - (categoryScrollRef.current?.offsetLeft || 0);
+    const walk = (x - startXRef.current) * 1.8;
+    if (Math.abs(walk) > 5) {
+      isDraggingRef.current = true;
+    }
+    if (categoryScrollRef.current) {
+      categoryScrollRef.current.scrollLeft = scrollLeftRef.current - walk;
+    }
+  };
+
+  const handleCategoryWheel = (e) => {
+    if (categoryScrollRef.current) {
+      if (e.deltaY !== 0) {
+        categoryScrollRef.current.scrollLeft += e.deltaY;
+      }
+    }
   };
 
   return (
@@ -1367,50 +1458,50 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
 
             {/* ── MENU VIEW ──────────────────────────────────────────────────────── */}
             <div className="space-y-6">
-              {/* PROMOTIONAL CAROUSEL — Auto-rotating & Touch Swipable */}
+              {/* PROMOTIONAL CAROUSEL — Auto-rotating, Touch Swipable & Fixed Uniform Sizing */}
               <div
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
-                className="relative overflow-hidden rounded-[28px] shadow-xl border border-white/10 select-none touch-pan-y"
+                className="relative overflow-hidden rounded-[28px] shadow-xl border border-white/10 select-none touch-pan-y min-h-[170px] sm:min-h-[190px] flex items-center bg-[#EA580C]"
               >
                 {/* Slides */}
                 {promoSlides.map((slide, idx) => (
                   <div
                     key={idx}
-                    className={`${idx === promoIndex ? 'block' : 'hidden'} relative bg-gradient-to-br ${slide.bg} text-white p-6 sm:p-8 lg:p-10 transition-all duration-500`}
+                    className={`${idx === promoIndex ? 'flex' : 'hidden'} w-full h-full min-h-[170px] sm:min-h-[190px] relative bg-gradient-to-br ${slide.bg} text-white px-10 py-5 sm:px-14 sm:py-6 lg:px-16 transition-all duration-500 items-center`}
                   >
                     {/* Decorative blurs */}
                     <div className="absolute top-0 right-0 w-72 h-72 bg-white/10 rounded-full blur-3xl pointer-events-none" />
                     <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-black/5 rounded-full blur-2xl pointer-events-none" />
 
-                    <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div className="flex-1 space-y-3">
+                    <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 w-full">
+                      <div className="flex-1 space-y-2">
                         <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/15 backdrop-blur-sm rounded-full text-[10px] sm:text-[11px] font-extrabold tracking-wider uppercase border border-white/20">
                           <Sparkles className="w-3 h-3 text-amber-300" />
                           <span>ZovikPOS • Smart Dining</span>
                         </div>
 
-                        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight">
+                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight leading-tight line-clamp-1">
                           {slide.headline}
                         </h1>
 
-                        <p className="text-[11px] sm:text-sm text-white/80 max-w-md leading-relaxed">
+                        <p className="text-[11px] sm:text-xs text-white/90 max-w-md leading-snug line-clamp-2">
                           {slide.sub}
                         </p>
 
                         <button
                           onClick={() => navigate('/customer/cart')}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 bg-white hover:bg-white/90 text-[#171717] font-extrabold text-xs rounded-2xl shadow-xl active:scale-95 transition-all cursor-pointer"
+                          className="inline-flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 bg-white hover:bg-white/90 text-[#171717] font-extrabold text-xs rounded-xl shadow-xl active:scale-95 transition-all cursor-pointer mt-1"
                         >
-                          <ShoppingBag className="w-4 h-4" />
+                          <ShoppingBag className="w-3.5 h-3.5" />
                           <span>View Cart {totalCartQuantity > 0 ? `(${totalCartQuantity})` : ''}</span>
-                          <ArrowRight className="w-4 h-4" />
+                          <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
                       {/* Large emoji icon on desktop */}
-                      <div className="hidden sm:flex items-center justify-center w-28 h-28 lg:w-36 lg:h-36 text-6xl lg:text-7xl bg-white/10 backdrop-blur-sm rounded-3xl border border-white/20 shadow-2xl shrink-0">
+                      <div className="hidden sm:flex items-center justify-center w-20 h-20 lg:w-24 lg:h-24 text-4xl lg:text-5xl bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 shadow-xl shrink-0">
                         {slide.icon}
                       </div>
                     </div>
@@ -1420,27 +1511,27 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                 {/* Carousel Arrows (desktop) */}
                 <button
                   onClick={() => goToSlide((promoIndex - 1 + promoSlides.length) % promoSlides.length)}
-                  className="hidden sm:flex absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full items-center justify-center text-white transition-all cursor-pointer z-20"
+                  className="hidden sm:flex absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full items-center justify-center text-white transition-all cursor-pointer z-20 shadow-md"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => goToSlide((promoIndex + 1) % promoSlides.length)}
-                  className="hidden sm:flex absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full items-center justify-center text-white transition-all cursor-pointer z-20"
+                  className="hidden sm:flex absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/20 hover:bg-white/40 backdrop-blur-sm rounded-full items-center justify-center text-white transition-all cursor-pointer z-20 shadow-md"
                 >
-                  <ChevronRight className="w-5 h-5" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
 
                 {/* Pagination Dots */}
-                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20">
                   {promoSlides.map((_, idx) => (
                     <button
                       key={idx}
                       onClick={() => goToSlide(idx)}
                       className={`rounded-full transition-all duration-300 cursor-pointer ${
                         idx === promoIndex
-                          ? 'w-6 h-2 bg-white'
-                          : 'w-2 h-2 bg-white/40 hover:bg-white/60'
+                          ? 'w-5 h-1.5 bg-white'
+                          : 'w-1.5 h-1.5 bg-white/40 hover:bg-white/60'
                       }`}
                     />
                   ))}
@@ -1460,12 +1551,23 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                   <Search className="w-5 h-5 text-[#A8A29E] dark:text-[#6B7280] group-focus-within:text-[#E85D2A] absolute left-4 top-4 transition-colors" />
                 </div>
 
-                {/* CATEGORY FILTERS */}
-                <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none">
+                {/* CATEGORY FILTERS — Drag-To-Scroll & Mouse Wheel Scroll Enabled */}
+                <div
+                  ref={categoryScrollRef}
+                  onMouseDown={handleCategoryMouseDown}
+                  onMouseLeave={handleCategoryMouseLeave}
+                  onMouseUp={handleCategoryMouseUp}
+                  onMouseMove={handleCategoryMouseMove}
+                  onWheel={handleCategoryWheel}
+                  className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none cursor-grab active:cursor-grabbing select-none"
+                >
                   {combinedCategories.map((cat) => (
                     <button
                       key={cat}
-                      onClick={() => setCategory(cat)}
+                      onClick={() => {
+                        if (isDraggingRef.current) return;
+                        setCategory(cat);
+                      }}
                       className={`px-4 py-2.5 rounded-2xl text-xs font-extrabold whitespace-nowrap transition-all duration-200 cursor-pointer ${category === cat
                           ? 'bg-[#E85D2A] text-white shadow-md shadow-[#E85D2A]/25 border border-[#E85D2A] scale-105'
                           : 'bg-white dark:bg-[#2A2A2A] border border-[#E7E5E4] dark:border-[#404040] text-[#78716C] dark:text-[#A8A29E] hover:border-[#E85D2A]/40 hover:text-[#E85D2A]'
@@ -1477,7 +1579,7 @@ const CustomerDashboard = ({ user, onLogout, tableIdFromRoute }) => {
                 </div>
               </div>
 
-              {/* FOOD PRODUCTS GRID — Premium mobile-first layout */}
+              {/* FOOD PRODUCTS GRID — Premium mobile-first layout with uniform card heights */}
               {isMenuLoading && menu.length === 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
                   {[1, 2, 3, 4, 5, 6].map((i) => (

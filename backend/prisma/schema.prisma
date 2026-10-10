@@ -42,6 +42,7 @@ model User {
   password      String
   name          String
   role          String               @default("CUSTOMER") // ADMIN, VENDOR, KITCHEN, CUSTOMER
+  isDemo        Boolean              @default(false)
   isActive      Boolean              @default(true)
   branchId      Int?
   branch        Branch?              @relation(fields: [branchId], references: [id])

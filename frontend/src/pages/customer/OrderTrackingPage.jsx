@@ -440,7 +440,7 @@ const OrderTrackingPage = () => {
             {/* Total Paid Financial Summary */}
             <div className="border-t border-[#E7E5E4] dark:border-[#333] pt-3.5 flex justify-between items-center text-sm font-black">
               <span className="text-[#171717] dark:text-white text-base">Total Paid:</span>
-              <span className="text-[#E85D2A] text-xl font-mono font-black">Rs. {order.total.toFixed(2)}</span>
+              <span className="text-[#E85D2A] text-xl font-mono font-black">Rs. {Number(order.total || 0).toFixed(2)}</span>
             </div>
           </div>
 

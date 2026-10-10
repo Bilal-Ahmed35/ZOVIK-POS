@@ -1,5 +1,6 @@
 const { prisma } = require('../config/db');
 const { emitToVendor, emitToKitchen, emitToUser, emitToAdmin } = require('../sockets/socket');
+const { convertUnit } = require('../utils/unitConverter');
 const {
   sendOrderPlacementEmail,
   sendOrderCompletionEmail,
@@ -149,6 +150,11 @@ const createOrder = async (req, res) => {
       for (const item of items) {
         const menuItem = await tx.menuItem.findUnique({
           where: { id: parseInt(item.menuItemId, 10) },
+          include: {
+            recipeItems: {
+              include: { inventoryItem: true }
+            }
+          }
         });
 
         if (!menuItem || !menuItem.isActive) {
@@ -156,7 +162,24 @@ const createOrder = async (req, res) => {
         }
 
         const qty = parseInt(item.quantity, 10) || 1;
-        if (menuItem.stock < qty) {
+
+        // Stock check: If recipe exists, verify ingredient stock levels
+        if (menuItem.recipeItems && menuItem.recipeItems.length > 0) {
+          for (const recipe of menuItem.recipeItems) {
+            const invItem = recipe.inventoryItem;
+            if (!invItem) continue;
+            const rawNeeded = recipe.quantity * qty;
+            let neededInInvUnit = rawNeeded;
+            try {
+              neededInInvUnit = convertUnit(rawNeeded, recipe.unit, invItem.unit);
+            } catch (convErr) {
+              neededInInvUnit = rawNeeded;
+            }
+            if (invItem.stockLevel < neededInInvUnit) {
+              throw new Error(`Insufficient inventory for "${invItem.name}". Needed: ${neededInInvUnit} ${invItem.unit}, Available: ${invItem.stockLevel} ${invItem.unit}.`);
+            }
+          }
+        } else if (menuItem.stock > 0 && menuItem.stock < qty) {
           throw new Error(`Insufficient stock for "${menuItem.name}". Only ${menuItem.stock} available.`);
         }
 
@@ -352,26 +375,15 @@ const updateOrderStatus = async (req, res) => {
     }
     // ADMIN has universal permission
 
-    // Execute status transition and stock deduction/restoration inside transaction
+    // STEP 1: Fast minimal transaction — only order update + status history (no heavy inventory)
+    const needsInventoryDeduction = status === 'PAID' && previousStatus !== 'PAID';
+    const needsInventoryRestore = ['CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'].includes(status) && !['CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'].includes(previousStatus);
+
+    const updatePayload = { status };
+    if (status === 'COMPLETED') updatePayload.completedAt = new Date();
+    if (status === 'PAID') updatePayload.paymentStatus = 'PAID';
+
     const updatedOrder = await prisma.$transaction(async (tx) => {
-      // If confirming order (PAID), trigger inventory deduction
-      if (status === 'PAID' && previousStatus !== 'PAID') {
-        await deductInventoryForConfirmedOrder(order.id, userId, tx);
-      }
-
-      // If cancelling/refunding order, trigger stock restoration idempotently
-      if (['CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'].includes(status) && !['CANCELLED', 'REFUNDED', 'PAYMENT_FAILED'].includes(previousStatus)) {
-        await restoreInventoryForOrder(order.id, userId, note || `Order status updated to ${status}`, tx);
-      }
-
-      const updatePayload = { status };
-      if (status === 'COMPLETED') {
-        updatePayload.completedAt = new Date();
-      }
-      if (status === 'PAID') {
-        updatePayload.paymentStatus = 'PAID';
-      }
-
       const updated = await tx.order.update({
         where: { id: order.id },
         data: updatePayload,
@@ -383,7 +395,6 @@ const updateOrderStatus = async (req, res) => {
         },
       });
 
-      // Record OrderStatusHistory
       await tx.orderStatusHistory.create({
         data: {
           orderId: order.id,
@@ -397,20 +408,32 @@ const updateOrderStatus = async (req, res) => {
       return updated;
     });
 
-    // Record closed-loop actual preparation time in ETAPrediction
-    if (['READY', 'COMPLETED'].includes(status)) {
+    // STEP 2: Background — inventory, ETA, emails, audit (non-blocking)
+    setImmediate(async () => {
       try {
-        const actualMinutes = (new Date() - new Date(order.createdAt)) / 60000;
-        await prisma.eTAPrediction.updateMany({
-          where: { orderId: order.id },
-          data: { actualTime: parseFloat(actualMinutes.toFixed(2)) },
-        });
-      } catch (etaErr) {
-        console.warn('ETA actualTime update warning:', etaErr.message);
+        if (needsInventoryDeduction) {
+          await deductInventoryForConfirmedOrder(order.id, userId, null);
+        } else if (needsInventoryRestore) {
+          await restoreInventoryForOrder(order.id, userId, note || `Order status updated to ${status}`, null);
+        }
+      } catch (invErr) {
+        console.error('[InventoryDeduction] Background error:', invErr.message);
       }
-    }
 
-    // Broadcast Realtime Socket Events
+      if (['READY', 'COMPLETED'].includes(status)) {
+        try {
+          const actualMinutes = (new Date() - new Date(order.createdAt)) / 60000;
+          await prisma.eTAPrediction.updateMany({
+            where: { orderId: order.id },
+            data: { actualTime: parseFloat(actualMinutes.toFixed(2)) },
+          });
+        } catch (etaErr) {
+          console.warn('[ETA] Background actualTime update warning:', etaErr.message);
+        }
+      }
+    });
+
+    // STEP 3: Broadcast Realtime Socket Events immediately
     emitToUser(updatedOrder.userId, 'order:update', updatedOrder);
     emitToVendor('order:update', updatedOrder);
     emitToAdmin('order:update', updatedOrder);
@@ -430,7 +453,7 @@ const updateOrderStatus = async (req, res) => {
       sendOrderCancellationEmail(updatedOrder, status).catch(err => console.error('[Email] Cancel email error:', err.message));
     }
 
-    await logAudit({
+    logAudit({
       userId,
       action: 'ORDER_STATUS_UPDATED',
       entity: 'Order',
@@ -438,7 +461,7 @@ const updateOrderStatus = async (req, res) => {
       oldValue: { status: previousStatus },
       newValue: { status },
       req,
-    });
+    }).catch(err => console.error('[Audit Log Error]', err));
 
     return res.json({
       message: `Order status updated to ${status}.`,

@@ -2,6 +2,8 @@ const bcrypt = require('bcryptjs');
 const { prisma } = require('../config/db');
 const { logAudit } = require('../middleware/auditMiddleware');
 const supabaseAdmin = require('../config/supabaseAdmin');
+const { broadcastEvent } = require('../sockets/socket');
+const { clearUserCache } = require('../middleware/authMiddleware');
 
 /**
  * Helper: sync a user action to Supabase Auth (silent fail if admin client not ready)
@@ -38,11 +40,22 @@ async function syncToSupabaseAuth(action, payload) {
   }
 }
 
+const dashboardStatsCache = new Map();
+const DASHBOARD_CACHE_TTL_MS = 15 * 1000; // 15s fast cache
+
 /**
  * Executive Dashboard Analytics with AI ETA accuracy, demand forecasts, and trends
  */
 const getDashboardStats = async (req, res) => {
-  const { period = 'day' } = req.query;
+  const { period = 'day', branchId, refresh } = req.query;
+  const cacheKey = `${period}_${branchId || 'all'}`;
+
+  if (refresh !== 'true' && dashboardStatsCache.has(cacheKey)) {
+    const cached = dashboardStatsCache.get(cacheKey);
+    if (Date.now() - cached.timestamp < DASHBOARD_CACHE_TTL_MS) {
+      return res.json(cached.payload);
+    }
+  }
 
   try {
     const now = new Date();
@@ -61,27 +74,112 @@ const getDashboardStats = async (req, res) => {
       startDate = new Date(now.getFullYear(), 0, 1);
     }
 
-    // 1. Total Revenue for verified orders
-    const paidOrders = await prisma.order.findMany({
-      where: {
-        status: { in: ['PAID', 'PREPARING', 'READY', 'COMPLETED'] },
-        createdAt: { gte: startDate },
-      },
-      select: { total: true },
-    });
-    const totalRevenue = paidOrders.reduce((sum, order) => sum + order.total, 0.0);
+    const branchFilter = (branchId && branchId !== 'all') ? { branchId: parseInt(branchId, 10) } : {};
 
-    // 2. Active Queue Count
-    const activeOrdersCount = await prisma.order.count({
-      where: {
-        status: { in: ['PENDING', 'PAYMENT_PENDING', 'PAID', 'PREPARING', 'READY'] },
-      },
+    // Execute all dashboard queries concurrently for max performance
+    const [
+      paidOrders,
+      activeOrdersCount,
+      users,
+      allInventoryItems,
+      recentOrders,
+      menuItems,
+      paidOrderItems,
+      etaRecords,
+      totalOrdersCountAllTime,
+      oldestOrder,
+    ] = await Promise.all([
+      // 1. Total Revenue for period
+      prisma.order.findMany({
+        where: {
+          status: { in: ['PAID', 'PREPARING', 'READY', 'COMPLETED'] },
+          createdAt: { gte: startDate },
+          ...branchFilter,
+        },
+        select: { id: true, total: true, paymentMethod: true, status: true, createdAt: true },
+      }),
+      // 2. Active Queue Count
+      prisma.order.count({
+        where: {
+          status: { in: ['PENDING', 'PAYMENT_PENDING', 'PAID', 'PREPARING', 'READY'] },
+          ...branchFilter,
+        },
+      }),
+      // 3. User & Staff Statistics
+      prisma.user.findMany({
+        select: { role: true, isActive: true },
+      }),
+      // 4. Inventory Items
+      prisma.inventoryItem.findMany({
+        where: branchFilter,
+      }),
+      // 5. Recent Orders
+      prisma.order.findMany({
+        take: 10,
+        where: branchFilter,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { name: true, email: true } },
+          orderItems: { include: { menuItem: true } },
+        },
+      }),
+      // 6. Menu Items
+      prisma.menuItem.findMany({
+        where: branchFilter,
+        include: { recipeItems: { include: { inventoryItem: true } } },
+      }),
+      // 7. Paid Order Items for top selling analysis
+      prisma.orderItem.findMany({
+        where: {
+          order: {
+            status: { in: ['PAID', 'PREPARING', 'READY', 'COMPLETED'] },
+            createdAt: { gte: startDate },
+            ...branchFilter,
+          },
+        },
+        include: { menuItem: true },
+      }),
+      // 8. AI ETA Records
+      prisma.eTAPrediction.findMany({
+        where: { actualTime: { not: null } },
+        take: 50,
+        orderBy: { createdAt: 'desc' },
+      }),
+      // 9. All time order count for confidence calculation
+      prisma.order.count({ where: branchFilter }),
+      // 10. Oldest order date
+      prisma.order.findFirst({
+        where: branchFilter,
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    // Calculate financial metrics
+    const totalRevenue = paidOrders.reduce((sum, order) => sum + (order.total || 0), 0.0);
+    const completedOrdersCount = paidOrders.length;
+    const averageOrderValue = completedOrdersCount > 0 ? parseFloat((totalRevenue / completedOrdersCount).toFixed(2)) : 0.0;
+
+    // Payment Method Breakdown
+    const paymentMethodsMap = { CASH: 0, CARD: 0, JAZZCASH: 0, EASYPAISA: 0, NAYAPAY: 0 };
+    const paymentMethodTotalsMap = { CASH: 0, CARD: 0, JAZZCASH: 0, EASYPAISA: 0, NAYAPAY: 0 };
+
+    paidOrders.forEach(o => {
+      const pm = (o.paymentMethod || 'CASH').toUpperCase();
+      if (!paymentMethodsMap[pm] && paymentMethodsMap[pm] !== 0) {
+        paymentMethodsMap[pm] = 0;
+        paymentMethodTotalsMap[pm] = 0;
+      }
+      paymentMethodsMap[pm] += 1;
+      paymentMethodTotalsMap[pm] += (o.total || 0);
     });
 
-    // 3. User & Staff Statistics
-    const users = await prisma.user.findMany({
-      select: { role: true, isActive: true },
-    });
+    const paymentBreakdown = Object.keys(paymentMethodsMap).map(method => ({
+      method,
+      count: paymentMethodsMap[method],
+      totalAmount: parseFloat(paymentMethodTotalsMap[method].toFixed(2)),
+    }));
+
     const userStats = {
       customer: users.filter(u => u.role === 'CUSTOMER').length,
       vendor: users.filter(u => u.role === 'VENDOR').length,
@@ -90,13 +188,9 @@ const getDashboardStats = async (req, res) => {
       activeStaff: users.filter(u => u.role !== 'CUSTOMER' && u.isActive !== false).length,
     };
 
-    // 4. Inventory Stock Categorization (CRITICAL, LOW STOCK, OK, OVERSTOCK)
-    const allInventoryItems = await prisma.inventoryItem.findMany();
     const lowStockAlerts = [];
     const stockRecommendations = [];
-
     allInventoryItems.forEach((item) => {
-      const ratio = item.minThreshold > 0 ? item.stockLevel / item.minThreshold : 1;
       let statusLevel = 'OK';
       let recommendedReorder = 0;
 
@@ -129,34 +223,11 @@ const getDashboardStats = async (req, res) => {
       }
     });
 
-    // 5. Recent Orders
-    const recentOrders = await prisma.order.findMany({
-      take: 10,
-      orderBy: { createdAt: 'desc' },
-      include: {
-        user: { select: { name: true, email: true } },
-        orderItems: { include: { menuItem: true } },
-      },
-    });
-
-    // 6. Category Breakdown
-    const menuItems = await prisma.menuItem.findMany();
     const categories = [...new Set(menuItems.map(item => item.category))];
     const categoryStats = categories.map(cat => ({
       category: cat,
       count: menuItems.filter(item => item.category === cat).length,
     }));
-
-    // 7. Top Selling Items
-    const paidOrderItems = await prisma.orderItem.findMany({
-      where: {
-        order: {
-          status: { in: ['PAID', 'PREPARING', 'READY', 'COMPLETED'] },
-          createdAt: { gte: startDate },
-        },
-      },
-      include: { menuItem: true },
-    });
 
     const itemAgg = {};
     paidOrderItems.forEach((item) => {
@@ -165,48 +236,87 @@ const getDashboardStats = async (req, res) => {
         itemAgg[name] = { name, quantity: 0, revenue: 0, category: item.menuItem?.category || 'General' };
       }
       itemAgg[name].quantity += item.quantity;
-      itemAgg[name].revenue += item.priceSnapshot * item.quantity;
+      itemAgg[name].revenue += (item.priceSnapshot || 0) * item.quantity;
     });
 
     const topItems = Object.values(itemAgg)
       .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 6);
+      .slice(0, 10);
 
-    // 8. AI ETA Accuracy & Prep Metrics
-    const etaRecords = await prisma.eTAPrediction.findMany({
-      where: { actualTime: { not: null } },
-      take: 50,
-      orderBy: { createdAt: 'desc' },
-    });
+    // Kitchen Prep Time Calculation (Req 6)
+    let avgPrepTime = null;
+    let avgPrepTimeLabel = "Not Enough Data";
+    let isActualPrepTime = false;
 
-    let avgPrepTime = 8.5; // default fallback
-    let etaAccuracy = 94.2; // default fallback
     if (etaRecords.length > 0) {
       const totalActual = etaRecords.reduce((s, r) => s + (r.actualTime || 0), 0);
       avgPrepTime = parseFloat((totalActual / etaRecords.length).toFixed(1));
-
-      const varianceList = etaRecords.map(r => Math.abs(r.adjustedEta - (r.actualTime || r.adjustedEta)));
-      const avgVariance = varianceList.reduce((s, v) => s + v, 0) / etaRecords.length;
-      etaAccuracy = parseFloat(Math.max(75, 100 - (avgVariance / (avgPrepTime || 1)) * 100).toFixed(1));
+      avgPrepTimeLabel = `${avgPrepTime} mins`;
+      isActualPrepTime = true;
+    } else if (menuItems.length > 0) {
+      const totalConfigured = menuItems.reduce((s, m) => s + (m.prepTime || 5), 0);
+      avgPrepTime = parseFloat((totalConfigured / menuItems.length).toFixed(1));
+      avgPrepTimeLabel = `${avgPrepTime} mins (configured)`;
+      isActualPrepTime = false;
     }
 
-    return res.json({
+    // Prediction Accuracy Calculation (Req 5)
+    let predictionAccuracy = null;
+    let accuracyLabel = "Not Enough Data";
+    let accuracyHelper = "Accuracy will appear after enough forecast history is available.";
+
+    if (etaRecords.length >= 10) {
+      const varianceList = etaRecords.map(r => Math.abs(r.adjustedEta - (r.actualTime || r.adjustedEta)));
+      const avgVariance = varianceList.reduce((s, v) => s + v, 0) / etaRecords.length;
+      const basePrep = avgPrepTime || 8;
+      predictionAccuracy = parseFloat(Math.max(60, Math.min(99, 100 - (avgVariance / basePrep) * 100)).toFixed(1));
+      accuracyLabel = `${predictionAccuracy}%`;
+      accuracyHelper = "Evaluated against actual POS kitchen prep trends";
+    }
+
+    // POS Data Confidence Calculation (Req 8)
+    const oldestDate = oldestOrder?.createdAt ? new Date(oldestOrder.createdAt) : now;
+    const dateSpanDays = Math.max(1, Math.ceil((now - oldestDate) / (1000 * 60 * 60 * 24)));
+
+    let posConfidenceScore = 'LOW';
+    if (totalOrdersCountAllTime >= 50 && dateSpanDays >= 14) {
+      posConfidenceScore = 'HIGH';
+    } else if (totalOrdersCountAllTime >= 10 && dateSpanDays >= 3) {
+      posConfidenceScore = 'MEDIUM';
+    }
+
+    const posConfidenceExplanation = `Based on ${totalOrdersCountAllTime} recorded order(s) over ${dateSpanDays} day(s)`;
+
+    const payload = {
       period,
+      branchId: branchId || 'all',
       metrics: {
         totalRevenue: parseFloat(totalRevenue.toFixed(2)),
+        totalOrdersCount: completedOrdersCount,
+        averageOrderValue,
         activeOrdersCount,
         usersCount: users.length,
         userStats,
         lowStockCount: lowStockAlerts.length,
         avgPrepTime,
-        etaAccuracy,
+        avgPrepTimeLabel,
+        isActualPrepTime,
+        predictionAccuracy,
+        accuracyLabel,
+        accuracyHelper,
+        posConfidenceScore,
+        posConfidenceExplanation,
       },
+      paymentBreakdown,
       lowStockAlerts,
       stockRecommendations,
       recentOrders,
       categoryStats,
       topItems,
-    });
+    };
+
+    dashboardStatsCache.set(cacheKey, { timestamp: Date.now(), payload });
+    return res.json(payload);
   } catch (error) {
     console.error('Fetch dashboard stats error:', error);
     return res.status(500).json({ error: 'Failed to retrieve admin dashboard stats.' });
@@ -259,6 +369,7 @@ const getStaffList = async (req, res) => {
         branch: { select: { id: true, name: true } },
         createdAt: true,
         updatedAt: true,
+        isDemo: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -270,7 +381,7 @@ const getStaffList = async (req, res) => {
 };
 
 const createStaff = async (req, res) => {
-  const { name, email, password, role, branchId = 1 } = req.body;
+  const { name, email, password, role, branchId, isDemo = false } = req.body;
 
   if (!name || !email || !password || !role) {
     return res.status(400).json({ error: 'Name, email, password, and role are required.' });
@@ -282,20 +393,34 @@ const createStaff = async (req, res) => {
   }
 
   try {
-    const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existing) {
       return res.status(400).json({ error: 'An account with this email already exists.' });
+    }
+
+    // Fix: Resolve default branchId dynamically from the database
+    let resolvedBranchId = branchId ? parseInt(branchId, 10) : null;
+    if (!resolvedBranchId) {
+      const defaultBranch = await prisma.branch.findFirst({
+        orderBy: { id: 'asc' }
+      });
+      if (defaultBranch) {
+        resolvedBranchId = defaultBranch.id;
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const newStaff = await prisma.user.create({
       data: {
         name: name.trim(),
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
         password: hashedPassword,
         role: role.toUpperCase(),
-        branchId: parseInt(branchId, 10) || 1,
+        branchId: resolvedBranchId,
         isActive: true,
+        isDemo: Boolean(isDemo),
       },
       select: {
         id: true,
@@ -303,20 +428,23 @@ const createStaff = async (req, res) => {
         email: true,
         role: true,
         isActive: true,
+        isDemo: true,
         branchId: true,
         createdAt: true,
       },
     });
 
-    // Sync to Supabase Auth (non-blocking)
+    // Sync to Supabase Auth so real account appears in Supabase dashboard
     const authUser = await syncToSupabaseAuth('create', {
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       password,
       name: name.trim(),
       role: role.toUpperCase(),
     });
     if (authUser?.user?.id) {
-      console.log(`✅ Supabase Auth user created: ${authUser.user.id}`);
+      console.log(`✅ Supabase Auth synced: ${normalizedEmail} (${authUser.user.id})`);
+    } else {
+      console.warn(`⚠️  Supabase Auth sync skipped for: ${normalizedEmail}`);
     }
 
     await logAudit({
@@ -337,7 +465,7 @@ const createStaff = async (req, res) => {
 
 const updateStaff = async (req, res) => {
   const { id } = req.params;
-  const { name, email, role, branchId } = req.body;
+  const { name, email, role, branchId, isDemo } = req.body;
 
   try {
     const updateData = {};
@@ -347,6 +475,7 @@ const updateStaff = async (req, res) => {
       updateData.role = role.toUpperCase();
     }
     if (branchId !== undefined) updateData.branchId = parseInt(branchId, 10);
+    if (isDemo !== undefined) updateData.isDemo = Boolean(isDemo);
 
     const updated = await prisma.user.update({
       where: { id: parseInt(id, 10) },
@@ -357,7 +486,20 @@ const updateStaff = async (req, res) => {
         email: true,
         role: true,
         isActive: true,
+        isDemo: true,
       },
+    });
+
+    // Clear in-memory auth cache and broadcast real-time socket event
+    clearUserCache(updated.id);
+    broadcastEvent('staff:account-updated', {
+      userId: updated.id,
+      email: updated.email,
+      newRole: updated.role,
+      isActive: updated.isActive,
+      isDemo: updated.isDemo,
+      action: 'ACCOUNT_UPDATED',
+      message: `Your account details were updated by the System Administrator.`,
     });
 
     return res.json({ message: 'Staff information updated successfully.', staff: updated });
@@ -392,7 +534,7 @@ const updateStaffRole = async (req, res) => {
     const updated = await prisma.user.update({
       where: { id: targetId },
       data: { role: role.toUpperCase() },
-      select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true, isDemo: true, createdAt: true },
     });
 
     // Sync role to Supabase Auth metadata if admin client is available
@@ -411,6 +553,19 @@ const updateStaffRole = async (req, res) => {
       entityId: targetId,
       newValue: { role: role.toUpperCase() },
       req,
+    });
+
+    // Clear in-memory auth cache and broadcast real-time account role change event
+    clearUserCache(targetId);
+    broadcastEvent('staff:account-updated', {
+      userId: targetId,
+      email: updated.email,
+      newRole: updated.role,
+      oldRole: current.role,
+      isActive: updated.isActive,
+      isDemo: updated.isDemo,
+      action: 'ROLE_CHANGED',
+      message: `Your account role has been updated from ${current.role} to ${updated.role} by Administrator.`,
     });
 
     return res.json({ message: `Role updated to ${role.toUpperCase()} successfully.`, staff: updated });
@@ -439,7 +594,7 @@ const toggleStaffStatus = async (req, res) => {
     const updated = await prisma.user.update({
       where: { id: targetId },
       data: { isActive: Boolean(isActive) },
-      select: { id: true, name: true, email: true, role: true, isActive: true },
+      select: { id: true, name: true, email: true, role: true, isActive: true, isDemo: true },
     });
 
     // Sync ban status to Supabase Auth
@@ -457,6 +612,20 @@ const toggleStaffStatus = async (req, res) => {
       entity: 'User',
       entityId: targetId,
       req,
+    });
+
+    // Clear in-memory auth cache and broadcast status toggle event
+    clearUserCache(targetId);
+    broadcastEvent('staff:account-updated', {
+      userId: targetId,
+      email: updated.email,
+      newRole: updated.role,
+      isActive: updated.isActive,
+      isDemo: updated.isDemo,
+      action: updated.isActive ? 'ACCOUNT_ACTIVATED' : 'ACCOUNT_DEACTIVATED',
+      message: updated.isActive
+        ? 'Your account has been activated by Administrator.'
+        : 'Your account has been deactivated by Administrator.',
     });
 
     return res.json({
